@@ -42,6 +42,7 @@ class EVCCApi:
         self.ws_thread = None
         self.ws_last_log_time = 0
         self.ws_log_interval = 60  # Log only once per minute to avoid log spam
+        self.ws_keep_connection = True  # Whether to keep WebSocket connection open
         
     def login(self):
         """Login to EVCC API if password is provided"""
@@ -94,8 +95,12 @@ class EVCCApi:
             return {"auth": self.auth_cookie.value}
         return {}
     
-    def connect_websocket(self):
-        """Connect to EVCC WebSocket for real-time data"""
+    def connect_websocket(self, keep_connection=True):
+        """Connect to EVCC WebSocket for real-time data
+        
+        Args:
+            keep_connection: If True, keep connection open. If False, close after receiving full state.
+        """
         if not websocket_available:
             Domoticz.Error("Websocket module not available. Install it using: pip3 install websocket-client")
             return False
@@ -103,6 +108,9 @@ class EVCCApi:
         if self.ws_connected:
             return True
             
+        # Store the keep_connection preference
+        self.ws_keep_connection = keep_connection
+        
         try:
             # Create WebSocket connection
             headers = {}
@@ -110,6 +118,9 @@ class EVCCApi:
             if cookies:
                 cookie_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
                 headers["Cookie"] = cookie_str
+            
+            # Flag to track if we've received a complete state update
+            self.received_complete_state = False
             
             # Define WebSocket callbacks
             def on_message(ws, message):
@@ -130,6 +141,15 @@ class EVCCApi:
                     if is_complete_state:
                         Domoticz.Debug("Complete WebSocket state update received")
                         self.ws_last_data = data
+                        self.received_complete_state = True
+                        
+                        # If we're in "one-time update" mode and we got a complete state,
+                        # close the connection after a short delay
+                        if not self.ws_keep_connection:
+                            Domoticz.Log("Received complete state, closing one-time WebSocket connection")
+                            # Start a timer to close the connection after a short delay
+                            # to allow for any immediate follow-up messages
+                            threading.Timer(2.0, self.close_websocket).start()
                     else:
                         # For partial updates, limit logging to reduce spam
                         if (current_time - self.ws_last_log_time) > self.ws_log_interval:
@@ -175,11 +195,28 @@ class EVCCApi:
                 while True:
                     try:
                         self.ws.run_forever()
-                        Domoticz.Log("WebSocket connection lost, reconnecting...")
-                        time.sleep(5)  # Wait before reconnecting
+                        
+                        # If we don't want to keep the connection or we've received a complete state
+                        # in one-time mode, exit the thread
+                        if not self.ws_keep_connection and self.received_complete_state:
+                            Domoticz.Log("One-time WebSocket connection complete")
+                            break
+                            
+                        # Otherwise, try to reconnect if keep_connection is True
+                        if self.ws_keep_connection:
+                            Domoticz.Log("WebSocket connection lost, reconnecting...")
+                            time.sleep(5)  # Wait before reconnecting
+                        else:
+                            # We were in one-time mode but didn't get complete data
+                            Domoticz.Error("WebSocket connection closed before receiving complete state data")
+                            break
+                            
                     except Exception as e:
                         Domoticz.Error(f"WebSocket thread error: {str(e)}")
-                        time.sleep(self.ws_reconnect_interval)
+                        if self.ws_keep_connection:
+                            time.sleep(self.ws_reconnect_interval)
+                        else:
+                            break
             
             self.ws_thread = threading.Thread(target=run_websocket)
             self.ws_thread.daemon = True
@@ -190,6 +227,17 @@ class EVCCApi:
             start_time = time.time()
             while not self.ws_connected and (time.time() - start_time) < timeout:
                 time.sleep(0.1)
+            
+            # For one-time updates, wait for complete data with timeout
+            if not self.ws_keep_connection and self.ws_connected:
+                # Wait for complete state or timeout
+                wait_timeout = 5  # 5 seconds max
+                wait_start = time.time()
+                while not self.received_complete_state and (time.time() - wait_start) < wait_timeout:
+                    time.sleep(0.1)
+                
+                if not self.received_complete_state:
+                    Domoticz.Log("Timeout waiting for complete state data, proceeding with partial data")
             
             return self.ws_connected
             
@@ -207,22 +255,34 @@ class EVCCApi:
             except Exception as e:
                 Domoticz.Error(f"Error closing WebSocket: {str(e)}")
     
-    def get_state(self):
-        """Get the current state of the EVCC system"""
-        # First try to get data from WebSocket if connected
+    def get_state(self, use_websocket=True, keep_connection=False):
+        """Get the current state of the EVCC system
+        
+        Args:
+            use_websocket: Whether to try WebSocket first
+            keep_connection: If using WebSocket, whether to keep the connection open
+                             after getting data (uses more resources but faster updates)
+        """
+        # Check if we already have WebSocket data
         if self.ws_connected and self.ws_last_data:
             return self.ws_last_data
         
-        # If WebSocket not available, fall back to REST API
-        try:
-            # First try to connect WebSocket if not already connected
-            if not self.ws_connected and websocket_available:
-                self.connect_websocket()
-                # If connection successful and data available, return it
+        # If WebSocket requested and available, try to use it
+        if use_websocket and websocket_available:
+            if not self.ws_connected:
+                # Connect, specifying whether to keep connection open
+                self.connect_websocket(keep_connection=keep_connection)
+                
+                # If connection successful and we have data...
                 if self.ws_connected and self.ws_last_data:
                     return self.ws_last_data
-            
-            # Otherwise use regular API
+                
+                # If one-time connection closed but we got data...
+                if not self.ws_connected and not keep_connection and self.ws_last_data:
+                    return self.ws_last_data
+        
+        # Fall back to REST API if WebSocket not available or failed
+        try:
             cookies = self.get_cookies()
             
             response = requests.get(f"{self.base_url}/state", cookies=cookies)
