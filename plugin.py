@@ -98,6 +98,8 @@ class BasePlugin:
                     for loadpoint_id_str, loadpoint in loadpoints.items():
                         loadpoint_id = len(self.device_manager.loadpoints) + 1
                         if isinstance(loadpoint, dict):
+                            # Store the external ID in the loadpoint data
+                            loadpoint["original_id"] = loadpoint_id_str
                             self.device_manager.loadpoints[loadpoint_id] = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
                             self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint, Devices)
             
@@ -117,6 +119,7 @@ class BasePlugin:
                         if isinstance(vehicle, dict):
                             vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {vehicle_index}"))
                             self.device_manager.vehicles[vehicle_index] = vehicle_name
+                            # Store the external ID in the vehicle data
                             vehicle["original_id"] = vehicle_id_str
                             self.device_manager.create_vehicle_devices(vehicle_index, vehicle, Devices)
                             vehicle_index += 1
@@ -131,9 +134,6 @@ class BasePlugin:
 
     def onHeartbeat(self):
         self.run_again -= 1
-
-
-
         if self.run_again <= 0:
             self.run_again = self.update_interval / 10  # Set for next update interval
             self.update_devices()
@@ -168,24 +168,33 @@ class BasePlugin:
                                 self.device_manager.create_vehicle_devices(vehicle_id, vehicle, Devices)
                             self.device_manager.update_vehicle_devices(vehicle_id, vehicle, Devices)
                 elif isinstance(vehicles, dict):
+                    # First try to map external IDs to our internal IDs using DeviceID
+                    vehicle_id_mapping = {}
+                    
+                    # Scan through existing devices to find vehicles and their external IDs
+                    for unit in Devices:
+                        device_info = self.device_manager.get_device_info(unit)
+                        if device_info and device_info["device_type"] == "vehicle":
+                            if Devices[unit].DeviceID and Devices[unit].DeviceID in vehicles:
+                                internal_id = int(device_info["device_id"])
+                                external_id = Devices[unit].DeviceID
+                                vehicle_id_mapping[external_id] = internal_id
+                    
+                    # Process vehicles
                     for vehicle_id_str, vehicle in vehicles.items():
-                        our_vehicle_id = None
-                        for idx, v_info in self.device_manager.vehicles.items():
-                            if isinstance(v_info, dict) and v_info.get("original_id") == vehicle_id_str:
-                                our_vehicle_id = idx
-                                break
-                        if our_vehicle_id is None:
+                        if vehicle_id_str in vehicle_id_mapping:
+                            # We already know this vehicle, update it
+                            our_vehicle_id = vehicle_id_mapping[vehicle_id_str]
+                            self.device_manager.update_vehicle_devices(our_vehicle_id, vehicle, Devices)
+                        else:
+                            # This is a new vehicle
                             our_vehicle_id = len(self.device_manager.vehicles) + 1
                             if isinstance(vehicle, dict):
                                 vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {our_vehicle_id}"))
-                                self.device_manager.vehicles[our_vehicle_id] = {
-                                    "name": vehicle_name,
-                                    "original_id": vehicle_id_str
-                                }
+                                self.device_manager.vehicles[our_vehicle_id] = vehicle_name
+                                # Store the external ID in the vehicle data
                                 vehicle["original_id"] = vehicle_id_str
                                 self.device_manager.create_vehicle_devices(our_vehicle_id, vehicle, Devices)
-                        if isinstance(vehicle, dict):
-                            self.device_manager.update_vehicle_devices(our_vehicle_id, vehicle, Devices)
             
             # Update loadpoint information
             if "loadpoints" in state:
@@ -200,23 +209,33 @@ class BasePlugin:
                                 self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint, Devices)
                             self.device_manager.update_loadpoint_devices(loadpoint_id, loadpoint, Devices)
                 elif isinstance(loadpoints, dict):
+                    # First try to map external IDs to our internal IDs using DeviceID
+                    loadpoint_id_mapping = {}
+                    
+                    # Scan through existing devices to find loadpoints and their external IDs
+                    for unit in Devices:
+                        device_info = self.device_manager.get_device_info(unit)
+                        if device_info and device_info["device_type"] == "loadpoint":
+                            if Devices[unit].DeviceID and Devices[unit].DeviceID in loadpoints:
+                                internal_id = int(device_info["device_id"])
+                                external_id = Devices[unit].DeviceID
+                                loadpoint_id_mapping[external_id] = internal_id
+                    
+                    # Process loadpoints
                     for loadpoint_id_str, loadpoint in loadpoints.items():
-                        our_loadpoint_id = None
-                        for idx, lp_name in self.device_manager.loadpoints.items():
-                            if isinstance(lp_name, dict) and lp_name.get("original_id", "") == loadpoint_id_str:
-                                our_loadpoint_id = idx
-                                break
-                        if our_loadpoint_id is None:
+                        if loadpoint_id_str in loadpoint_id_mapping:
+                            # We already know this loadpoint, update it
+                            our_loadpoint_id = loadpoint_id_mapping[loadpoint_id_str]
+                            self.device_manager.update_loadpoint_devices(our_loadpoint_id, loadpoint, Devices)
+                        else:
+                            # This is a new loadpoint
                             our_loadpoint_id = len(self.device_manager.loadpoints) + 1
                             if isinstance(loadpoint, dict):
                                 loadpoint_name = loadpoint.get("title", f"Loadpoint {our_loadpoint_id}")
-                                self.device_manager.loadpoints[our_loadpoint_id] = {
-                                    "name": loadpoint_name,
-                                    "original_id": loadpoint_id_str
-                                }
+                                self.device_manager.loadpoints[our_loadpoint_id] = loadpoint_name
+                                # Store the external ID in the loadpoint data
+                                loadpoint["original_id"] = loadpoint_id_str
                                 self.device_manager.create_loadpoint_devices(our_loadpoint_id, loadpoint, Devices)
-                        if isinstance(loadpoint, dict):
-                            self.device_manager.update_loadpoint_devices(our_loadpoint_id, loadpoint, Devices)
                     
         except Exception as e:
             Domoticz.Error(f"Error updating devices: {str(e)}")
@@ -242,7 +261,12 @@ class BasePlugin:
                     elif Level == 20: mode = "minpv"
                     elif Level == 30: mode = "pv"
                     
-                    if self.api.set_loadpoint_mode(device_id, mode):
+                    # Get original ID from DeviceID if available
+                    external_id = device_id
+                    if Devices[Unit].DeviceID:
+                        external_id = Devices[Unit].DeviceID
+                    
+                    if self.api.set_loadpoint_mode(external_id, mode):
                         update_device_value(Unit, Level, 0, Devices)
                 
                 elif parameter == "phases":
@@ -251,15 +275,30 @@ class BasePlugin:
                     elif Level == 10: phases = 1  # 1-phase
                     elif Level == 20: phases = 3  # 3-phase
                     
-                    if self.api.set_loadpoint_phases(device_id, phases):
+                    # Get original ID from DeviceID if available
+                    external_id = device_id
+                    if Devices[Unit].DeviceID:
+                        external_id = Devices[Unit].DeviceID
+                    
+                    if self.api.set_loadpoint_phases(external_id, phases):
                         update_device_value(Unit, Level, 0, Devices)
                 
                 elif parameter == "min_soc":
-                    if self.api.set_loadpoint_min_soc(device_id, Level):
+                    # Get original ID from DeviceID if available
+                    external_id = device_id
+                    if Devices[Unit].DeviceID:
+                        external_id = Devices[Unit].DeviceID
+                    
+                    if self.api.set_loadpoint_min_soc(external_id, Level):
                         update_device_value(Unit, 0, Level, Devices)
                 
                 elif parameter == "target_soc":
-                    if self.api.set_loadpoint_target_soc(device_id, Level):
+                    # Get original ID from DeviceID if available
+                    external_id = device_id
+                    if Devices[Unit].DeviceID:
+                        external_id = Devices[Unit].DeviceID
+                    
+                    if self.api.set_loadpoint_target_soc(external_id, Level):
                         update_device_value(Unit, 0, Level, Devices)
             
             elif device_type == "battery" and parameter == "mode":
@@ -273,19 +312,15 @@ class BasePlugin:
                     update_device_value(Unit, Level, 0, Devices)
                     
             elif device_type == "vehicle":
-                vehicle_info = self.device_manager.vehicles.get(int(device_id), None)
-                original_id = None
+                # Get original ID from DeviceID if available
+                external_id = None
+                if Devices[Unit].DeviceID:
+                    external_id = Devices[Unit].DeviceID
                 
-                if vehicle_info:
-                    if isinstance(vehicle_info, dict):
-                        original_id = vehicle_info.get("original_id", None)
-                    else:
-                        original_id = f"vehicle_{device_id}"
-                
-                if original_id:
-                    Domoticz.Log(f"Command for vehicle {original_id} parameter {parameter} not implemented yet")
+                if external_id:
+                    Domoticz.Log(f"Command for vehicle {external_id} parameter {parameter} not implemented yet")
                 else:
-                    Domoticz.Error(f"Cannot find original ID for vehicle {device_id}")
+                    Domoticz.Error(f"Cannot find external ID for vehicle {device_id}")
                 
         except Exception as e:
             Domoticz.Error(f"Error handling command: {str(e)}")
