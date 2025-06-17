@@ -130,9 +130,12 @@ class EVCCApi:
             # Define WebSocket callbacks
             def on_message(ws, message):
                 try:
-                    # Parse the JSON message
+                    # Parse and log the JSON message
                     data = json.loads(message)
                     current_time = time.time()
+                    
+                    # Log the received data
+                    Domoticz.Debug(f"WebSocket received data: {json.dumps(data, indent=2)}")
                     
                     # Determine if this is a complete state update
                     # Complete updates typically include multiple key indicators
@@ -169,7 +172,7 @@ class EVCCApi:
                                 
                                 if (current_time - self.ws_last_log_time) > self.ws_log_interval:
                                     self.ws_last_log_time = current_time
-                                    Domoticz.Debug("Merged partial WebSocket updates with last complete state")
+                                    Domoticz.Debug(f"Merged partial WebSocket updates with last complete state: {json.dumps(merged_data, indent=2)}")
                     
                 except Exception as e:
                     Domoticz.Error(f"Error parsing WebSocket data: {str(e)}")
@@ -280,6 +283,7 @@ class EVCCApi:
         """
         # Check if we already have WebSocket data
         if self.ws_connected and self.ws_last_data:
+            Domoticz.Debug(f"Using cached WebSocket data: {json.dumps(self.ws_last_data, indent=2)}")
             return self.ws_last_data
         
         # If WebSocket requested and available, try to use it
@@ -290,10 +294,12 @@ class EVCCApi:
                 
                 # If connection successful and we have data...
                 if self.ws_connected and self.ws_last_data:
+                    Domoticz.Debug(f"Using new WebSocket data: {json.dumps(self.ws_last_data, indent=2)}")
                     return self.ws_last_data
                 
                 # If one-time connection closed but we got data...
                 if not self.ws_connected and not keep_connection and self.ws_last_data:
+                    Domoticz.Debug(f"Using one-time WebSocket data: {json.dumps(self.ws_last_data, indent=2)}")
                     return self.ws_last_data
         
         # Fall back to REST API if WebSocket not available or failed
@@ -308,53 +314,8 @@ class EVCCApi:
 
             data = response.json()
             
-            # Check if this is data or result.data
-            if "result" in data:
-                return data["result"]
-            else:
-                return data
-                
-        except Exception as e:
-            Domoticz.Error(f"Error getting EVCC state: {str(e)}")
-            return None  
-
-    def get_state(self, use_websocket=True, keep_connection=False):
-        """Get the current state of the EVCC system
-        
-        Args:
-            use_websocket: Whether to try WebSocket first
-            keep_connection: If using WebSocket, whether to keep the connection open
-                             after getting data (uses more resources but faster updates)
-        """
-        # Check if we already have WebSocket data
-        if self.ws_connected and self.ws_last_data:
-            return self.ws_last_data
-        
-        # If WebSocket requested and available, try to use it
-        if use_websocket and websocket_available:
-            if not self.ws_connected:
-                # Connect, specifying whether to keep connection open
-                self.connect_websocket(keep_connection=keep_connection)
-                
-                # If connection successful and we have data...
-                if self.ws_connected and self.ws_last_data:
-                    return self.ws_last_data
-                
-                # If one-time connection closed but we got data...
-                if not self.ws_connected and not keep_connection and self.ws_last_data:
-                    return self.ws_last_data
-        
-        # Fall back to REST API if WebSocket not available or failed
-        try:
-            cookies = self.get_cookies()
-            
-            response = requests.get(f"{self.base_url}/state", cookies=cookies)
-            
-            if response.status_code != 200:
-                Domoticz.Error(f"Failed to get EVCC state: {response.status_code}")
-                return None
-
-            data = response.json()
+            # Log the REST API response
+            Domoticz.Debug(f"REST API response: {json.dumps(data, indent=2)}")
             
             # Check if this is data or result.data
             if "result" in data:
