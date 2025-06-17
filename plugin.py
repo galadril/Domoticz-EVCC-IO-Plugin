@@ -61,6 +61,9 @@ class BasePlugin:
         # Initialize device manager
         self.device_manager = DeviceManager()
         
+        # Load existing device mappings with Devices object
+        self.device_manager._load_device_mapping(Devices)
+        
         # If authentication is required, login first
         if Parameters["Password"] != "":
             self.api.login()

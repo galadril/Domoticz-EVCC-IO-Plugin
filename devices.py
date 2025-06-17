@@ -25,16 +25,16 @@ class DeviceManager:
         self.vehicles = {}
         self.battery_present = False
         
-        # Load existing device mappings
-        self._load_device_mapping()
+        # Load existing device mappings will be done in onStart
+        # after Devices are available
         
-    def _load_device_mapping(self):
+    def _load_device_mapping(self, Devices):
         """Load device mapping from existing device descriptions"""
         self.device_unit_mapping = {}
         self.unit_device_mapping = {}
         
-        for unit in Domoticz.Devices:
-            device = Domoticz.Devices[unit]
+        for unit in Devices:
+            device = Devices[unit]
             # Try to extract mappings from device description if it follows our convention
             # Format: {type}_{id}_{parameter}
             match = re.search(r'^([a-z]+)_(\d+)_([a-z_]+)$', device.Description)
