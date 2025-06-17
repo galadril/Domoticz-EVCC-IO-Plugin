@@ -21,7 +21,7 @@ def extract_device_info_from_description(description):
 
 def update_device_value(unit, n_value, s_value):
     """Helper method to update device values"""
-    if unit not in Domoticz.Devices:
+    if unit not in Devices:
         Domoticz.Error(f"Device unit {unit} does not exist")
         return
         
@@ -30,7 +30,7 @@ def update_device_value(unit, n_value, s_value):
             s_value = str(s_value)
             
         Domoticz.Debug(f"Updating device {unit} - n_value: {n_value}, s_value: {s_value}")
-        Domoticz.Devices[unit].Update(nValue=n_value, sValue=s_value, TimedOut=0)
+        Devices[unit].Update(nValue=n_value, sValue=s_value, TimedOut=0)
         
     except Exception as e:
         Domoticz.Error(f"Error updating device {unit}: {str(e)}")
@@ -64,7 +64,7 @@ def get_device_unit(device_mapping, unit_device_mapping, device_type, device_id,
     
     # Find the next available unit number
     unit = base_unit
-    while unit in Domoticz.Devices:
+    while unit in Devices:
         unit += 1
     
     # Store the mapping
