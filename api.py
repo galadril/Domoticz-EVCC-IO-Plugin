@@ -10,12 +10,20 @@ import requests
 import json
 import threading
 import time
+import sys
+import os
 
+# Try to import websocket, with a fallback for Domoticz environment
+websocket_available = False
 try:
+    # Add plugin directory to path to ensure all packages can be found
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     import websocket
+    websocket_available = True
+    Domoticz.Log("Websocket module successfully imported")
 except ImportError:
-    Domoticz.Error("Websocket-client module not found. Please install it.")
-    websocket = None
+    Domoticz.Error("Websocket-client module not found. Install it using: pip3 install websocket-client")
+    websocket_available = False
 
 class EVCCApi:
     """Class for handling EVCC API communications"""
@@ -86,8 +94,8 @@ class EVCCApi:
     
     def connect_websocket(self):
         """Connect to EVCC WebSocket for real-time data"""
-        if not websocket:
-            Domoticz.Error("Websocket module not available")
+        if not websocket_available:
+            Domoticz.Error("Websocket module not available. Install it using: pip3 install websocket-client")
             return False
             
         if self.ws_connected:
@@ -178,7 +186,7 @@ class EVCCApi:
         # If WebSocket not available, fall back to REST API
         try:
             # First try to connect WebSocket if not already connected
-            if not self.ws_connected and websocket:
+            if not self.ws_connected and websocket_available:
                 self.connect_websocket()
                 # If connection successful and data available, return it
                 if self.ws_connected and self.ws_last_data:
