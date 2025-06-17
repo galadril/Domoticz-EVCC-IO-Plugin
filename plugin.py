@@ -7,12 +7,6 @@
         <param field="Address" label="IP Address" width="200px" required="true" default="192.168.1.100"/>
         <param field="Port" label="Port" width="30px" required="true" default="7070"/>
         <param field="Password" label="Password (if auth enabled)" width="200px" required="false" default="" password="true"/>
-        <param field="Mode1" label="Use WebSocket" width="75px">
-            <options>
-                <option label="Yes" value="1" default="true"/>
-                <option label="No" value="0"/>
-            </options>
-        </param>
         <param field="Mode2" label="Update interval (seconds)" width="30px" required="true" default="60"/>
         <param field="Mode6" label="Debug" width="200px">
             <options>
@@ -32,41 +26,12 @@
 import Domoticz
 import time
 import json
-import sys
-import os
 
 # Import our modules
-try:
-    from api import EVCCApi, websocket_available
-    from devices import DeviceManager
-    from constants import DEFAULT_UPDATE_INTERVAL
-    from helpers import update_device_value
-except ImportError as e:
-    Domoticz.Error(f"Error importing modules: {str(e)}")
-    # Try to add the plugin directory to path
-    plugin_dir = os.path.dirname(os.path.abspath(__file__))
-    if plugin_dir not in sys.path:
-        sys.path.append(plugin_dir)
-        Domoticz.Log(f"Added plugin directory to path: {plugin_dir}")
-    
-    # Try import again
-    try:
-        from api import EVCCApi, websocket_available
-        from devices import DeviceManager
-        from constants import DEFAULT_UPDATE_INTERVAL
-        from helpers import update_device_value
-    except ImportError as e:
-        Domoticz.Error(f"Failed to import modules even after adding plugin directory to path: {str(e)}")
-        # Define dummy classes in case imports failed
-        class DummyDeviceManager:
-            def __init__(self): pass
-        class DummyEVCCApi:
-            def __init__(self, address, port, password): pass
-        EVCCApi = DummyEVCCApi
-        DeviceManager = DummyDeviceManager
-        DEFAULT_UPDATE_INTERVAL = 60
-        def update_device_value(unit, n_value, s_value, Devices): pass
-        websocket_available = False
+from api import EVCCApi
+from devices import DeviceManager
+from constants import DEFAULT_UPDATE_INTERVAL
+from helpers import update_device_value
 
 class BasePlugin:
     """Main EVCC IO Plugin class"""
@@ -77,10 +42,6 @@ class BasePlugin:
         self.run_again = 6
         self.update_interval = DEFAULT_UPDATE_INTERVAL
         self.use_websocket = True
-        self.last_websocket_update = 0
-        self.last_device_update = 0
-        self.last_data = None
-        self.min_websocket_update_interval = 5  # Minimum seconds between updates
         
     def onStart(self):
         Domoticz.Debug("onStart called")
@@ -88,10 +49,6 @@ class BasePlugin:
         # Set update interval from parameters
         if Parameters["Mode2"] != "":
             self.update_interval = int(Parameters["Mode2"])
-        
-        # Whether to use WebSocket
-        if Parameters["Mode1"] == "0":
-            self.use_websocket = False
         
         # Set Debugging
         Domoticz.Debugging(int(Parameters["Mode6"]))
@@ -113,40 +70,22 @@ class BasePlugin:
         if Parameters["Password"] != "":
             self.api.login()
         
-        # Connect to WebSocket if required and available
+        # Connect to WebSocket if required
         if self.use_websocket:
-            if not websocket_available:
-                Domoticz.Log("WebSocket support is not available. Will use REST API instead.")
-                Domoticz.Log("Please install websocket-client package if you want WebSocket support.")
-                self.use_websocket = False
-            else:
-                ws_connected = self.api.connect_websocket()
-                if not ws_connected:
-                    Domoticz.Log("Failed to connect to WebSocket. Will use REST API instead.")
-                    self.use_websocket = False
-                else:
-                    Domoticz.Log("WebSocket connected successfully. Will receive real-time updates.")
+            self.api.connect_websocket()
         
         # Fetch initial state to create devices
         self._get_initial_state()
         
-        # Configure heartbeat - use a more frequent heartbeat if using WebSocket
-        # so we can check for new data often, while still respecting update_interval for REST API
-        if self.use_websocket:
-            Domoticz.Heartbeat(2)  # Check for new WebSocket data every 2 seconds
-        else:
-            Domoticz.Heartbeat(10)  # Use standard 10-second interval for REST API
+        # Configure heartbeat
+        Domoticz.Heartbeat(10)
 
     def _get_initial_state(self):
         """Fetch initial state to discover devices"""
         try:
             state = self.api.get_state()
             if not state:
-                Domoticz.Error("Failed to get initial state from EVCC API")
                 return
-            
-            # Cache the initial state
-            self.last_data = state
             
             # Process flat structure from WebSocket
             # Check for loadpoint structure that's common in WebSocket format
@@ -155,15 +94,10 @@ class BasePlugin:
             # Create site devices
             if has_loadpoint_prefix:
                 # This is a WebSocket flat structure
-                Domoticz.Log("Detected WebSocket flat data structure")
                 self._process_websocket_data(state)
             else:
                 # This is the original REST API nested structure
-                Domoticz.Log("Detected REST API nested data structure")
                 self._process_rest_api_data(state)
-            
-            # Mark as successfully updated
-            self.last_device_update = time.time()
             
         except Exception as e:
             Domoticz.Error(f"Error getting initial state: {str(e)}")
@@ -285,40 +219,17 @@ class BasePlugin:
             self.api.logout()
 
     def onHeartbeat(self):
-        current_time = time.time()
-        
-        # For WebSocket mode, check if we have new data available
-        if self.use_websocket:
-            # Check if we have new WebSocket data
-            if self.api.ws_connected and self.api.ws_last_data:
-                # Check if the data is different from what we last processed
-                if (self.api.ws_last_data != self.last_data and 
-                    current_time - self.last_websocket_update >= self.min_websocket_update_interval):
-                    # Update data and process changes
-                    self.last_data = self.api.ws_last_data
-                    self.last_websocket_update = current_time
-                    self.update_devices()
-        else:
-            # For REST API mode, use the standard interval
-            self.run_again -= 1
-            if self.run_again <= 0:
-                self.run_again = self.update_interval / 10  # Set for next update interval
-                self.update_devices()
+        self.run_again -= 1
+        if self.run_again <= 0:
+            self.run_again = self.update_interval / 10  # Set for next update interval
+            self.update_devices()
 
     def update_devices(self):
         """Update all device values from EVCC API"""
         try:
             # Get the EVCC system state
-            if self.use_websocket and self.last_data:
-                # Use cached data if using WebSocket since it's continually updated
-                state = self.last_data
-            else:
-                # Otherwise, fetch fresh data
-                state = self.api.get_state()
-                self.last_data = state
-                
+            state = self.api.get_state()
             if not state:
-                Domoticz.Debug("No state data available for update")
                 return
             
             # Check for loadpoint structure that's common in WebSocket format
@@ -330,9 +241,6 @@ class BasePlugin:
             else:
                 # This is the original REST API nested structure
                 self._update_devices_from_rest_api_data(state)
-            
-            # Mark the last update time
-            self.last_device_update = time.time()
                     
         except Exception as e:
             Domoticz.Error(f"Error updating devices: {str(e)}")
@@ -358,4 +266,274 @@ class BasePlugin:
         # Update loadpoint data
         loadpoint_indexes = set()
         for key in data.keys():
-            if key.startswith("
+            if key.startswith("loadpoints."):
+                parts = key.split(".")
+                if len(parts) >= 2:
+                    loadpoint_index = parts[1]
+                    if loadpoint_index.isdigit():
+                        loadpoint_indexes.add(int(loadpoint_index))
+        
+        # Then update each loadpoint's data
+        for idx in loadpoint_indexes:
+            prefix = f"loadpoints.{idx}."
+            loadpoint_data = {
+                key[len(prefix):]: value 
+                for key, value in data.items() 
+                if key.startswith(prefix)
+            }
+            
+            # Create or update loadpoint with a numeric ID
+            loadpoint_id = idx + 1
+            
+            # If this is a new loadpoint, create devices for it
+            if loadpoint_id not in self.device_manager.loadpoints:
+                if "title" in loadpoint_data:
+                    self.device_manager.loadpoints[loadpoint_id] = loadpoint_data["title"]
+                else:
+                    self.device_manager.loadpoints[loadpoint_id] = f"Loadpoint {loadpoint_id}"
+                self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint_data, Devices)
+            
+            # Update the devices for this loadpoint
+            self.device_manager.update_loadpoint_devices(loadpoint_id, loadpoint_data, Devices)
+        
+        # Process vehicle data if available
+        if "vehicles" in data and isinstance(data["vehicles"], dict):
+            # First try to map external IDs to our internal IDs
+            vehicle_id_mapping = {}
+            
+            # Scan through existing devices to find vehicles and their external IDs
+            for unit in Devices:
+                device_info = self.device_manager.get_device_info(unit)
+                if device_info and device_info["device_type"] == "vehicle":
+                    if Devices[unit].DeviceID and Devices[unit].DeviceID in data["vehicles"]:
+                        internal_id = int(device_info["device_id"])
+                        external_id = Devices[unit].DeviceID
+                        vehicle_id_mapping[external_id] = internal_id
+            
+            # Process each vehicle
+            for vehicle_id_str, vehicle_data in data["vehicles"].items():
+                if isinstance(vehicle_data, dict):
+                    if vehicle_id_str in vehicle_id_mapping:
+                        # Update existing vehicle
+                        our_vehicle_id = vehicle_id_mapping[vehicle_id_str]
+                        self.device_manager.update_vehicle_devices(our_vehicle_id, vehicle_data, Devices)
+                    else:
+                        # Create new vehicle
+                        our_vehicle_id = len(self.device_manager.vehicles) + 1
+                        vehicle_name = vehicle_data.get("title", f"Vehicle {our_vehicle_id}")
+                        self.device_manager.vehicles[our_vehicle_id] = vehicle_name
+                        vehicle_data["original_id"] = vehicle_id_str
+                        self.device_manager.create_vehicle_devices(our_vehicle_id, vehicle_data, Devices)
+    
+    def _update_devices_from_rest_api_data(self, state):
+        """Update devices with REST API data"""
+        # Update site and battery information
+        if "site" in state:
+            site_data = state["site"]
+            self.device_manager.update_site_devices(site_data, Devices)
+            
+            # Update battery devices if present
+            if self.device_manager.battery_present:
+                self.device_manager.update_battery_devices(site_data, Devices)
+        
+        # Update vehicle information
+        if "vehicles" in state:
+            vehicles = state["vehicles"]
+            if isinstance(vehicles, list):
+                for i, vehicle in enumerate(vehicles):
+                    vehicle_id = i + 1
+                    if isinstance(vehicle, dict):
+                        if vehicle_id not in self.device_manager.vehicles:
+                            vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {vehicle_id}"))
+                            self.device_manager.vehicles[vehicle_id] = vehicle_name
+                            # Store the original ID in the vehicle data for API calls
+                            vehicle["original_id"] = str(vehicle_id)
+                            self.device_manager.create_vehicle_devices(vehicle_id, vehicle, Devices)
+                        self.device_manager.update_vehicle_devices(vehicle_id, vehicle, Devices)
+            elif isinstance(vehicles, dict):
+                # First try to find existing vehicles with external IDs
+                vehicle_id_mapping = {}
+                
+                # Scan through existing devices to find vehicles and their external IDs
+                for unit in Devices:
+                    device_info = self.device_manager.get_device_info(unit)
+                    if device_info and device_info["device_type"] == "vehicle":
+                        if Devices[unit].DeviceID and Devices[unit].DeviceID in vehicles:
+                            internal_id = int(device_info["device_id"])
+                            external_id = Devices[unit].DeviceID
+                            vehicle_id_mapping[external_id] = internal_id
+                            
+                            # Ensure we have a clean name in the vehicles dict
+                            if internal_id in self.device_manager.vehicles and isinstance(self.device_manager.vehicles[internal_id], dict):
+                                # Extract just the name from the dict if needed
+                                if "name" in self.device_manager.vehicles[internal_id]:
+                                    self.device_manager.vehicles[internal_id] = self.device_manager.vehicles[internal_id]["name"]
+                
+                # Process vehicles, updating if known or creating if new
+                for vehicle_id_str, vehicle in vehicles.items():
+                    if vehicle_id_str in vehicle_id_mapping:
+                        # We already know this vehicle, update it
+                        our_vehicle_id = vehicle_id_mapping[vehicle_id_str]
+                        self.device_manager.update_vehicle_devices(our_vehicle_id, vehicle, Devices)
+                    else:
+                        # This is a new vehicle
+                        our_vehicle_id = len(self.device_manager.vehicles) + 1
+                        if isinstance(vehicle, dict):
+                            vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {our_vehicle_id}"))
+                            self.device_manager.vehicles[our_vehicle_id] = vehicle_name
+                            # Store the external ID in the vehicle data
+                            vehicle["original_id"] = vehicle_id_str
+                            self.device_manager.create_vehicle_devices(our_vehicle_id, vehicle, Devices)
+        
+        # Update loadpoint information
+        if "loadpoints" in state:
+            loadpoints = state["loadpoints"]
+            if isinstance(loadpoints, list):
+                for i, loadpoint in enumerate(loadpoints):
+                    loadpoint_id = i + 1
+                    if isinstance(loadpoint, dict):
+                        if loadpoint_id not in self.device_manager.loadpoints:
+                            loadpoint_name = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
+                            self.device_manager.loadpoints[loadpoint_id] = loadpoint_name
+                            # Store the original ID in the loadpoint data for API calls
+                            loadpoint["original_id"] = str(loadpoint_id)
+                            self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint, Devices)
+                        self.device_manager.update_loadpoint_devices(loadpoint_id, loadpoint, Devices)
+            elif isinstance(loadpoints, dict):
+                # First try to find existing loadpoints with external IDs
+                loadpoint_id_mapping = {}
+                
+                # Scan through existing devices to find loadpoints and their external IDs
+                for unit in Devices:
+                    device_info = self.device_manager.get_device_info(unit)
+                    if device_info and device_info["device_type"] == "loadpoint":
+                        if Devices[unit].DeviceID and Devices[unit].DeviceID in loadpoints:
+                            internal_id = int(device_info["device_id"])
+                            external_id = Devices[unit].DeviceID
+                            loadpoint_id_mapping[external_id] = internal_id
+                            
+                            # Ensure we have a clean name in the loadpoints dict
+                            if internal_id in self.device_manager.loadpoints and isinstance(self.device_manager.loadpoints[internal_id], dict):
+                                # Extract just the name from the dict if needed
+                                if "name" in self.device_manager.loadpoints[internal_id]:
+                                    self.device_manager.loadpoints[internal_id] = self.device_manager.loadpoints[internal_id]["name"]
+                
+                # Process loadpoints, updating if known or creating if new
+                for loadpoint_id_str, loadpoint in loadpoints.items():
+                    if loadpoint_id_str in loadpoint_id_mapping:
+                        # We already know this loadpoint, update it
+                        our_loadpoint_id = loadpoint_id_mapping[loadpoint_id_str]
+                        self.device_manager.update_loadpoint_devices(our_loadpoint_id, loadpoint, Devices)
+                    else:
+                        # This is a new loadpoint
+                        our_loadpoint_id = len(self.device_manager.loadpoints) + 1
+                        if isinstance(loadpoint, dict):
+                            loadpoint_name = loadpoint.get("title", f"Loadpoint {our_loadpoint_id}")
+                            self.device_manager.loadpoints[our_loadpoint_id] = loadpoint_name
+                            # Store the external ID in the loadpoint data
+                            loadpoint["original_id"] = loadpoint_id_str
+                            self.device_manager.create_loadpoint_devices(our_loadpoint_id, loadpoint, Devices)
+            
+    def onCommand(self, Unit, Command, Level, Hue):
+        """Handle commands sent to devices"""
+        Domoticz.Debug(f"onCommand called for Unit: {Unit} Command: {Command} Level: {Level}")
+        
+        device_info = self.device_manager.get_device_info(Unit)
+        if not device_info:
+            Domoticz.Error(f"Unknown device unit: {Unit}")
+            return
+            
+        device_type = device_info["device_type"]
+        device_id = device_info["device_id"]
+        parameter = device_info["parameter"]
+        
+        try:
+            if device_type == "loadpoint":
+                if parameter == "mode":
+                    mode = "off"
+                    if Level == 10: mode = "now" 
+                    elif Level == 20: mode = "minpv"
+                    elif Level == 30: mode = "pv"
+                    
+                    # Get original ID from DeviceID if available
+                    external_id = device_id
+                    if Devices[Unit].DeviceID:
+                        external_id = Devices[Unit].DeviceID
+                    
+                    if self.api.set_loadpoint_mode(external_id, mode):
+                        update_device_value(Unit, Level, 0, Devices)
+                
+                elif parameter == "phases":
+                    phases = 0
+                    if Level == 0: phases = 0  # auto
+                    elif Level == 10: phases = 1  # 1-phase
+                    elif Level == 20: phases = 3  # 3-phase
+                    
+                    # Get original ID from DeviceID if available
+                    external_id = device_id
+                    if Devices[Unit].DeviceID:
+                        external_id = Devices[Unit].DeviceID
+                    
+                    if self.api.set_loadpoint_phases(external_id, phases):
+                        update_device_value(Unit, Level, 0, Devices)
+                
+                elif parameter == "min_soc":
+                    # Get original ID from DeviceID if available
+                    external_id = device_id
+                    if Devices[Unit].DeviceID:
+                        external_id = Devices[Unit].DeviceID
+                    
+                    if self.api.set_loadpoint_min_soc(external_id, Level):
+                        update_device_value(Unit, 0, Level, Devices)
+                
+                elif parameter == "target_soc":
+                    # Get original ID from DeviceID if available
+                    external_id = device_id
+                    if Devices[Unit].DeviceID:
+                        external_id = Devices[Unit].DeviceID
+                    
+                    if self.api.set_loadpoint_target_soc(external_id, Level):
+                        update_device_value(Unit, 0, Level, Devices)
+            
+            elif device_type == "battery" and parameter == "mode":
+                mode = "normal"
+                if Level == 0: mode = "unknown"
+                elif Level == 10: mode = "normal"
+                elif Level == 20: mode = "hold"
+                elif Level == 30: mode = "charge"
+                
+                if self.api.set_battery_mode(mode):
+                    update_device_value(Unit, Level, 0, Devices)
+                    
+            elif device_type == "vehicle":
+                # Get original ID from DeviceID if available
+                external_id = None
+                if Devices[Unit].DeviceID:
+                    external_id = Devices[Unit].DeviceID
+                
+                if external_id:
+                    Domoticz.Log(f"Command for vehicle {external_id} parameter {parameter} not implemented yet")
+                else:
+                    Domoticz.Error(f"Cannot find external ID for vehicle {device_id}")
+                
+        except Exception as e:
+            Domoticz.Error(f"Error handling command: {str(e)}")
+
+# Global plugin instance
+_plugin = BasePlugin()
+
+def onStart():
+    global _plugin
+    _plugin.onStart()
+
+def onStop():
+    global _plugin
+    _plugin.onStop()
+
+def onHeartbeat():
+    global _plugin
+    _plugin.onHeartbeat()
+
+def onCommand(Unit, Command, Level, Hue):
+    global _plugin
+    _plugin.onCommand(Unit, Command, Level, Hue)

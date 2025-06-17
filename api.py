@@ -42,7 +42,7 @@ class EVCCApi:
         self.ws_thread = None
         self.ws_last_log_time = 0
         self.ws_log_interval = 60  # Log only once per minute to avoid log spam
-        self.ws_keep_connection = True  # Whether to keep WebSocket connection open
+        self.ws_keep_connection = False  # Whether to keep WebSocket connection open
         
     def login(self):
         """Login to EVCC API if password is provided"""
