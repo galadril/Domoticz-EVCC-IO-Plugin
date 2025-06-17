@@ -40,6 +40,8 @@ class EVCCApi:
         self.ws_error = None
         self.ws_reconnect_interval = 60  # Reconnect every 60 seconds if connection lost
         self.ws_thread = None
+        self.ws_last_log_time = 0
+        self.ws_log_interval = 60  # Log only once per minute to avoid log spam
         
     def login(self):
         """Login to EVCC API if password is provided"""
@@ -112,8 +114,35 @@ class EVCCApi:
             # Define WebSocket callbacks
             def on_message(ws, message):
                 try:
-                    self.ws_last_data = json.loads(message)
-                    Domoticz.Debug("WebSocket data received")
+                    # Parse the JSON message
+                    data = json.loads(message)
+                    
+                    # Determine if this is a partial update or complete state
+                    is_complete_state = False
+                    
+                    # Check if this is a complete state update
+                    # Complete updates typically include pvPower, grid, or specific identifiers
+                    if any(key in data for key in ["pvPower", "grid", "homePower", "version", "vehicles"]):
+                        is_complete_state = True
+                    
+                    # Log only complete state updates or once per minute for partial updates
+                    current_time = time.time()
+                    if is_complete_state:
+                        Domoticz.Debug("Complete WebSocket state update received")
+                        self.ws_last_data = data
+                    else:
+                        # For partial updates, limit logging to reduce spam
+                        if (current_time - self.ws_last_log_time) > self.ws_log_interval:
+                            self.ws_last_log_time = current_time
+                            Domoticz.Debug(f"Partial WebSocket update received with keys: {', '.join(list(data.keys())[:5])}...")
+                        
+                        # Merge partial updates with last complete state if available
+                        if self.ws_last_data:
+                            self.ws_last_data.update(data)
+                        else:
+                            # If no previous state, store this as the base state
+                            self.ws_last_data = data
+                    
                 except Exception as e:
                     Domoticz.Error(f"Error parsing WebSocket data: {str(e)}")
             
@@ -128,6 +157,7 @@ class EVCCApi:
             def on_open(ws):
                 self.ws_connected = True
                 self.ws_error = None
+                self.ws_last_data = None  # Reset data on new connection
                 Domoticz.Log("WebSocket connection established")
             
             # Create WebSocket instance
