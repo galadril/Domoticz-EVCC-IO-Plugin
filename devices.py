@@ -48,7 +48,18 @@ class DeviceManager:
                 self.device_unit_mapping[key] = unit
                 self.unit_device_mapping[unit] = key
                 
+                # Store loadpoint/vehicle info from DeviceID if available
+                if device_type == "vehicle" and device.DeviceID:
+                    if int(device_id) not in self.vehicles:
+                        self.vehicles[int(device_id)] = device.Name.replace(" SoC", "").replace(" Status", "").replace(" Range", "")
+                
+                if device_type == "loadpoint" and device.DeviceID:
+                    if int(device_id) not in self.loadpoints:
+                        self.loadpoints[int(device_id)] = device.Name.replace(" Charging Power", "").replace(" Charged Energy", "").replace(" Charging Mode", "").replace(" Charging Phases", "").replace(" Min SoC", "").replace(" Target SoC", "").replace(" Charging Timer", "")
+                
                 Domoticz.Debug(f"Loaded device mapping: {key} -> Unit {unit}")
+                if device.DeviceID:
+                    Domoticz.Debug(f"  with external ID: {device.DeviceID}")
         
     def create_site_devices(self, site_data, Devices):
         """Create the site Domoticz.Devices based on available data"""
@@ -116,12 +127,18 @@ class DeviceManager:
         """Create Domoticz.Devices for a vehicle"""
         vehicle_name = self.vehicles.get(vehicle_id, f"Vehicle {vehicle_id}")
         
+        # Use the original_id as DeviceID if provided
+        external_id = ""
+        if "original_id" in vehicle_data:
+            external_id = vehicle_data["original_id"]
+        
         # Vehicle SoC
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                               "vehicle", vehicle_id, "soc", True, Devices)
         if unit not in Devices:
             Domoticz.Device(Unit=unit, Name=f"{vehicle_name} SoC", Type=243, Subtype=6, 
-                           Used=1, Description=f"vehicle_{vehicle_id}_soc").Create()
+                           Used=1, Description=f"vehicle_{vehicle_id}_soc", 
+                           DeviceID=external_id).Create()
             
         # Vehicle range
         if "range" in vehicle_data:
@@ -129,7 +146,8 @@ class DeviceManager:
                                   "vehicle", vehicle_id, "range", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name=f"{vehicle_name} Range", Type=243, Subtype=31, 
-                               Used=1, Description=f"vehicle_{vehicle_id}_range").Create()
+                               Used=1, Description=f"vehicle_{vehicle_id}_range", 
+                               DeviceID=external_id).Create()
             
         # Vehicle status
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
@@ -141,25 +159,33 @@ class DeviceManager:
                       "SelectorStyle": "0"}
             Domoticz.Device(Unit=unit, Name=f"{vehicle_name} Status", Type=244, Subtype=62, 
                            Switchtype=18, Image=9, Options=Options, Used=1, 
-                           Description=f"vehicle_{vehicle_id}_status").Create()
+                           Description=f"vehicle_{vehicle_id}_status", 
+                           DeviceID=external_id).Create()
     
     def create_loadpoint_devices(self, loadpoint_id, loadpoint_data, Devices):
         """Create Domoticz.Devices for a loadpoint"""
         loadpoint_name = self.loadpoints.get(loadpoint_id, f"Loadpoint {loadpoint_id}")
+        
+        # Use the original_id as DeviceID if provided
+        external_id = ""
+        if "original_id" in loadpoint_data:
+            external_id = loadpoint_data["original_id"]
         
         # Charging power
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                               "loadpoint", loadpoint_id, "charging_power", True, Devices)
         if unit not in Devices:
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Power", Type=243, Subtype=29, 
-                           Used=1, Description=f"loadpoint_{loadpoint_id}_charging_power").Create()
+                           Used=1, Description=f"loadpoint_{loadpoint_id}_charging_power", 
+                           DeviceID=external_id).Create()
         
         # Charged energy
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                               "loadpoint", loadpoint_id, "charged_energy", True, Devices)
         if unit not in Devices:
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charged Energy", Type=243, Subtype=33, 
-                           Used=1, Description=f"loadpoint_{loadpoint_id}_charged_energy").Create()
+                           Used=1, Description=f"loadpoint_{loadpoint_id}_charged_energy", 
+                           DeviceID=external_id).Create()
             
         # Charging mode
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
@@ -171,7 +197,8 @@ class DeviceManager:
                       "SelectorStyle": "0"}
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Mode", Type=244, Subtype=62, 
                            Switchtype=18, Image=9, Options=Options, Used=1, 
-                           Description=f"loadpoint_{loadpoint_id}_mode").Create()
+                           Description=f"loadpoint_{loadpoint_id}_mode", 
+                           DeviceID=external_id).Create()
             
         # Phases
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
@@ -183,7 +210,8 @@ class DeviceManager:
                       "SelectorStyle": "0"}
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Phases", Type=244, Subtype=62, 
                            Switchtype=18, Image=9, Options=Options, Used=1, 
-                           Description=f"loadpoint_{loadpoint_id}_phases").Create()
+                           Description=f"loadpoint_{loadpoint_id}_phases", 
+                           DeviceID=external_id).Create()
             
         # Min SoC if applicable
         if "minSoc" in loadpoint_data:
@@ -191,7 +219,8 @@ class DeviceManager:
                                   "loadpoint", loadpoint_id, "min_soc", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Min SoC", Type=243, Subtype=6, 
-                               Used=1, Description=f"loadpoint_{loadpoint_id}_min_soc").Create()
+                               Used=1, Description=f"loadpoint_{loadpoint_id}_min_soc", 
+                               DeviceID=external_id).Create()
             
         # Target SoC if applicable
         if "targetSoc" in loadpoint_data:
@@ -199,14 +228,16 @@ class DeviceManager:
                                   "loadpoint", loadpoint_id, "target_soc", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Target SoC", Type=243, Subtype=6, 
-                               Used=1, Description=f"loadpoint_{loadpoint_id}_target_soc").Create()
+                               Used=1, Description=f"loadpoint_{loadpoint_id}_target_soc", 
+                               DeviceID=external_id).Create()
         
         # Charging timer
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                               "loadpoint", loadpoint_id, "charging_timer", True, Devices)
         if unit not in Devices:
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Timer", Type=243, Subtype=8, 
-                           Used=1, Description=f"loadpoint_{loadpoint_id}_charging_timer").Create()
+                           Used=1, Description=f"loadpoint_{loadpoint_id}_charging_timer", 
+                           DeviceID=external_id).Create()
     
     def update_site_devices(self, site_data, Devices):
         """Update site Domoticz.Devices"""
