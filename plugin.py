@@ -243,7 +243,7 @@ class BasePlugin:
                     elif Level == 30: mode = "pv"
                     
                     if self.api.set_loadpoint_mode(device_id, mode):
-                        update_device_value(Unit, Level, 0)
+                        update_device_value(Unit, Level, 0, Devices)
                 
                 elif parameter == "phases":
                     phases = 0
@@ -252,15 +252,15 @@ class BasePlugin:
                     elif Level == 20: phases = 3  # 3-phase
                     
                     if self.api.set_loadpoint_phases(device_id, phases):
-                        update_device_value(Unit, Level, 0)
+                        update_device_value(Unit, Level, 0, Devices)
                 
                 elif parameter == "min_soc":
                     if self.api.set_loadpoint_min_soc(device_id, Level):
-                        update_device_value(Unit, 0, Level)
+                        update_device_value(Unit, 0, Level, Devices)
                 
                 elif parameter == "target_soc":
                     if self.api.set_loadpoint_target_soc(device_id, Level):
-                        update_device_value(Unit, 0, Level)
+                        update_device_value(Unit, 0, Level, Devices)
             
             elif device_type == "battery" and parameter == "mode":
                 mode = "normal"
@@ -270,7 +270,7 @@ class BasePlugin:
                 elif Level == 30: mode = "charge"
                 
                 if self.api.set_battery_mode(mode):
-                    update_device_value(Unit, Level, 0)
+                    update_device_value(Unit, Level, 0, Devices)
                     
             elif device_type == "vehicle":
                 vehicle_info = self.device_manager.vehicles.get(int(device_id), None)

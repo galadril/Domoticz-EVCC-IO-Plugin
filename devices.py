@@ -6,7 +6,7 @@ Author: Mark Heinis
 """
 
 import Domoticz
-from helpers import get_device_unit
+from helpers import get_device_unit, update_device_value
 import re
 
 class DeviceManager:
@@ -50,12 +50,12 @@ class DeviceManager:
                 
                 Domoticz.Debug(f"Loaded device mapping: {key} -> Unit {unit}")
         
-    def create_site_devices(self, site_data):
+    def create_site_devices(self, site_data, Devices):
         """Create the site Domoticz.Devices based on available data"""
         # Grid power
         if "gridPower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "grid_power", True)
+                                  "site", 1, "grid_power", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="Grid Power", Type=243, Subtype=29, 
                                Used=1, Description="site_1_grid_power").Create()
@@ -63,7 +63,7 @@ class DeviceManager:
         # Home power
         if "homePower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "home_power", True)
+                                  "site", 1, "home_power", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="Home Power", Type=243, Subtype=29, 
                                Used=1, Description="site_1_home_power").Create()
@@ -71,7 +71,7 @@ class DeviceManager:
         # PV power
         if "pvPower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "pv_power", True)
+                                  "site", 1, "pv_power", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="PV Power", Type=243, Subtype=29, 
                                Used=1, Description="site_1_pv_power").Create()
@@ -79,14 +79,14 @@ class DeviceManager:
         # Battery Domoticz.Devices if present
         if "batteryPower" in site_data or "batterySoc" in site_data:
             self.battery_present = True
-            self.create_battery_devices(site_data)
+            self.create_battery_devices(site_data, Devices)
     
-    def create_battery_devices(self, site_data):
+    def create_battery_devices(self, site_data, Devices):
         """Create battery Domoticz.Devices"""
         # Battery power
         if "batteryPower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "battery", 1, "power", True)
+                                  "battery", 1, "power", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="Battery Power", Type=243, Subtype=29, 
                                Used=1, Description="battery_1_power").Create()
@@ -94,7 +94,7 @@ class DeviceManager:
         # Battery SoC
         if "batterySoc" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "battery", 1, "soc", True)
+                                  "battery", 1, "soc", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="Battery State of Charge", Type=243, Subtype=6, 
                                Used=1, Description="battery_1_soc").Create()
@@ -102,7 +102,7 @@ class DeviceManager:
         # Battery mode
         if "batteryMode" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "battery", 1, "mode", True)
+                                  "battery", 1, "mode", True, Devices)
             if unit not in Devices:
                 Options = {"LevelActions": "|||||",
                           "LevelNames": "Unknown|Normal|Hold|Charge|External",
@@ -112,13 +112,13 @@ class DeviceManager:
                               Switchtype=18, Image=9, Options=Options, Used=1, 
                               Description="battery_1_mode").Create()
     
-    def create_vehicle_devices(self, vehicle_id, vehicle_data):
+    def create_vehicle_devices(self, vehicle_id, vehicle_data, Devices):
         """Create Domoticz.Devices for a vehicle"""
         vehicle_name = self.vehicles.get(vehicle_id, f"Vehicle {vehicle_id}")
         
         # Vehicle SoC
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "vehicle", vehicle_id, "soc", True)
+                              "vehicle", vehicle_id, "soc", True, Devices)
         if unit not in Devices:
             Domoticz.Device(Unit=unit, Name=f"{vehicle_name} SoC", Type=243, Subtype=6, 
                            Used=1, Description=f"vehicle_{vehicle_id}_soc").Create()
@@ -126,14 +126,14 @@ class DeviceManager:
         # Vehicle range
         if "range" in vehicle_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "vehicle", vehicle_id, "range", True)
+                                  "vehicle", vehicle_id, "range", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name=f"{vehicle_name} Range", Type=243, Subtype=31, 
                                Used=1, Description=f"vehicle_{vehicle_id}_range").Create()
             
         # Vehicle status
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "vehicle", vehicle_id, "status", True)
+                              "vehicle", vehicle_id, "status", True, Devices)
         if unit not in Devices:
             Options = {"LevelActions": "||||",
                       "LevelNames": "Disconnected|Connected|Charging|Complete",
@@ -143,27 +143,27 @@ class DeviceManager:
                            Switchtype=18, Image=9, Options=Options, Used=1, 
                            Description=f"vehicle_{vehicle_id}_status").Create()
     
-    def create_loadpoint_devices(self, loadpoint_id, loadpoint_data):
+    def create_loadpoint_devices(self, loadpoint_id, loadpoint_data, Devices):
         """Create Domoticz.Devices for a loadpoint"""
         loadpoint_name = self.loadpoints.get(loadpoint_id, f"Loadpoint {loadpoint_id}")
         
         # Charging power
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "loadpoint", loadpoint_id, "charging_power", True)
+                              "loadpoint", loadpoint_id, "charging_power", True, Devices)
         if unit not in Devices:
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Power", Type=243, Subtype=29, 
                            Used=1, Description=f"loadpoint_{loadpoint_id}_charging_power").Create()
         
         # Charged energy
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "loadpoint", loadpoint_id, "charged_energy", True)
+                              "loadpoint", loadpoint_id, "charged_energy", True, Devices)
         if unit not in Devices:
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charged Energy", Type=243, Subtype=33, 
                            Used=1, Description=f"loadpoint_{loadpoint_id}_charged_energy").Create()
             
         # Charging mode
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "loadpoint", loadpoint_id, "mode", True)
+                              "loadpoint", loadpoint_id, "mode", True, Devices)
         if unit not in Devices:
             Options = {"LevelActions": "||||",
                       "LevelNames": "Off|Now|Min+PV|PV",
@@ -175,7 +175,7 @@ class DeviceManager:
             
         # Phases
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "loadpoint", loadpoint_id, "phases", True)
+                              "loadpoint", loadpoint_id, "phases", True, Devices)
         if unit not in Devices:
             Options = {"LevelActions": "|||",
                       "LevelNames": "Auto|1-Phase|3-Phase",
@@ -188,7 +188,7 @@ class DeviceManager:
         # Min SoC if applicable
         if "minSoc" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "loadpoint", loadpoint_id, "min_soc", True)
+                                  "loadpoint", loadpoint_id, "min_soc", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Min SoC", Type=243, Subtype=6, 
                                Used=1, Description=f"loadpoint_{loadpoint_id}_min_soc").Create()
@@ -196,65 +196,61 @@ class DeviceManager:
         # Target SoC if applicable
         if "targetSoc" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "loadpoint", loadpoint_id, "target_soc", True)
+                                  "loadpoint", loadpoint_id, "target_soc", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Target SoC", Type=243, Subtype=6, 
                                Used=1, Description=f"loadpoint_{loadpoint_id}_target_soc").Create()
         
         # Charging timer
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "loadpoint", loadpoint_id, "charging_timer", True)
+                              "loadpoint", loadpoint_id, "charging_timer", True, Devices)
         if unit not in Devices:
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Timer", Type=243, Subtype=8, 
                            Used=1, Description=f"loadpoint_{loadpoint_id}_charging_timer").Create()
     
-    def update_site_devices(self, site_data):
+    def update_site_devices(self, site_data, Devices):
         """Update site Domoticz.Devices"""
-        from helpers import update_device_value
-        
         # Grid power
         if "gridPower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "grid_power")
+                                  "site", 1, "grid_power", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, site_data["gridPower"])
+                update_device_value(unit, 0, site_data["gridPower"], Devices)
         
         # Home power
         if "homePower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "home_power")
+                                  "site", 1, "home_power", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, site_data["homePower"])
+                update_device_value(unit, 0, site_data["homePower"], Devices)
                 
         # PV power
         if "pvPower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "pv_power")
+                                  "site", 1, "pv_power", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, site_data["pvPower"])
+                update_device_value(unit, 0, site_data["pvPower"], Devices)
     
-    def update_battery_devices(self, site_data):
+    def update_battery_devices(self, site_data, Devices):
         """Update battery Domoticz.Devices"""
-        from helpers import update_device_value
-        
         # Battery power
         if "batteryPower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "battery", 1, "power")
+                                  "battery", 1, "power", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, site_data["batteryPower"])
+                update_device_value(unit, 0, site_data["batteryPower"], Devices)
                 
         # Battery SoC
         if "batterySoc" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "battery", 1, "soc")
+                                  "battery", 1, "soc", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, site_data["batterySoc"])
+                update_device_value(unit, 0, site_data["batterySoc"], Devices)
                 
         # Battery mode
         if "batteryMode" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "battery", 1, "mode")
+                                  "battery", 1, "mode", False, Devices)
             if unit is not None:
                 battery_mode = site_data["batteryMode"]
                 mode_value = 0  # unknown
@@ -262,60 +258,56 @@ class DeviceManager:
                 elif battery_mode == "hold": mode_value = 20
                 elif battery_mode == "charge": mode_value = 30
                 elif battery_mode == "external": mode_value = 40
-                update_device_value(unit, mode_value, 0)
+                update_device_value(unit, mode_value, 0, Devices)
     
-    def update_vehicle_devices(self, vehicle_id, vehicle_data):
+    def update_vehicle_devices(self, vehicle_id, vehicle_data, Devices):
         """Update vehicle Domoticz.Devices"""
-        from helpers import update_device_value
-        
         # Vehicle SoC
         if "soc" in vehicle_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "vehicle", vehicle_id, "soc")
+                                  "vehicle", vehicle_id, "soc", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, vehicle_data["soc"])
+                update_device_value(unit, 0, vehicle_data["soc"], Devices)
                 
         # Vehicle range
         if "range" in vehicle_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "vehicle", vehicle_id, "range")
+                                  "vehicle", vehicle_id, "range", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, vehicle_data["range"])
+                update_device_value(unit, 0, vehicle_data["range"], Devices)
         
         # Vehicle status
         if "status" in vehicle_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "vehicle", vehicle_id, "status")
+                                  "vehicle", vehicle_id, "status", False, Devices)
             if unit is not None:
                 status = vehicle_data["status"]
                 status_value = 0  # disconnected
                 if status == "A": status_value = 10  # connected
                 elif status == "B": status_value = 20  # charging
                 elif status == "C": status_value = 30  # complete
-                update_device_value(unit, status_value, 0)
+                update_device_value(unit, status_value, 0, Devices)
     
-    def update_loadpoint_devices(self, loadpoint_id, loadpoint_data):
+    def update_loadpoint_devices(self, loadpoint_id, loadpoint_data, Devices):
         """Update loadpoint Domoticz.Devices"""
-        from helpers import update_device_value
-        
         # Charging power
         if "chargePower" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "loadpoint", loadpoint_id, "charging_power")
+                                  "loadpoint", loadpoint_id, "charging_power", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, loadpoint_data["chargePower"])
+                update_device_value(unit, 0, loadpoint_data["chargePower"], Devices)
         
         # Charged energy
         if "chargedEnergy" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "loadpoint", loadpoint_id, "charged_energy")
+                                  "loadpoint", loadpoint_id, "charged_energy", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, loadpoint_data["chargedEnergy"])
+                update_device_value(unit, 0, loadpoint_data["chargedEnergy"], Devices)
                 
         # Charging mode
         if "mode" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "loadpoint", loadpoint_id, "mode")
+                                  "loadpoint", loadpoint_id, "mode", False, Devices)
             if unit is not None:
                 mode = loadpoint_data["mode"]
                 mode_value = 0
@@ -323,45 +315,45 @@ class DeviceManager:
                 elif mode == "now": mode_value = 10
                 elif mode == "minpv": mode_value = 20
                 elif mode == "pv": mode_value = 30
-                update_device_value(unit, mode_value, 0)
+                update_device_value(unit, mode_value, 0, Devices)
         
         # Phases
         if "phases" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "loadpoint", loadpoint_id, "phases")
+                                  "loadpoint", loadpoint_id, "phases", False, Devices)
             if unit is not None:
                 phases = loadpoint_data["phases"]
                 phases_value = 0
                 if phases == 0: phases_value = 0  # auto
                 elif phases == 1: phases_value = 10  # 1-phase
                 elif phases == 3: phases_value = 20  # 3-phase
-                update_device_value(unit, phases_value, 0)
+                update_device_value(unit, phases_value, 0, Devices)
         
         # Min SoC
         if "minSoc" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "loadpoint", loadpoint_id, "min_soc")
+                                  "loadpoint", loadpoint_id, "min_soc", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, loadpoint_data["minSoc"])
+                update_device_value(unit, 0, loadpoint_data["minSoc"], Devices)
         
         # Target SoC
         if "targetSoc" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "loadpoint", loadpoint_id, "target_soc")
+                                  "loadpoint", loadpoint_id, "target_soc", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, loadpoint_data["targetSoc"])
+                update_device_value(unit, 0, loadpoint_data["targetSoc"], Devices)
         
         # Charging timer
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "loadpoint", loadpoint_id, "charging_timer")
+                              "loadpoint", loadpoint_id, "charging_timer", False, Devices)
         if unit is not None:
             if "charging" in loadpoint_data and loadpoint_data["charging"]:
                 if "chargeTimer" in loadpoint_data:
                     charge_timer = loadpoint_data["chargeTimer"]
                     minutes = int(charge_timer / 60)
-                    update_device_value(unit, 0, minutes)
+                    update_device_value(unit, 0, minutes, Devices)
             else:
-                update_device_value(unit, 0, 0)
+                update_device_value(unit, 0, 0, Devices)
                 
     def get_device_info(self, unit):
         """Get device type, id and parameter from unit number"""

@@ -19,10 +19,16 @@ def extract_device_info_from_description(description):
         }
     return None
 
-def update_device_value(unit, n_value, s_value):
+def update_device_value(unit, n_value, s_value, Devices=None):
     """Helper method to update device values"""
-    # Devices is a global in the plugin context, so we can use it directly here
-    if unit not in Devices:
+    # Use the passed Devices parameter if available, otherwise fall back to global
+    if Devices is not None:
+        devices_to_use = Devices
+    else:
+        # Devices is a global in the plugin context
+        devices_to_use = Devices
+        
+    if unit not in devices_to_use:
         Domoticz.Error(f"Device unit {unit} does not exist")
         return
         
@@ -31,12 +37,12 @@ def update_device_value(unit, n_value, s_value):
             s_value = str(s_value)
             
         Domoticz.Debug(f"Updating device {unit} - n_value: {n_value}, s_value: {s_value}")
-        Devices[unit].Update(nValue=n_value, sValue=s_value, TimedOut=0)
+        devices_to_use[unit].Update(nValue=n_value, sValue=s_value, TimedOut=0)
         
     except Exception as e:
         Domoticz.Error(f"Error updating device {unit}: {str(e)}")
 
-def get_device_unit(device_mapping, unit_device_mapping, device_type, device_id, parameter, create_new=False):
+def get_device_unit(device_mapping, unit_device_mapping, device_type, device_id, parameter, create_new=False, Devices=None):
     """Get or create a device unit number for the specified device"""
     # Import here to avoid circular imports
     from constants import (UNIT_BASE_SITE, UNIT_BASE_BATTERY, 
@@ -65,9 +71,14 @@ def get_device_unit(device_mapping, unit_device_mapping, device_type, device_id,
     
     # Find the next available unit number
     unit = base_unit
-    # Devices is a global in the plugin context
-    while unit in Devices:
-        unit += 1
+    # Use the passed Devices parameter if available, otherwise fall back to global
+    if Devices is not None:
+        while unit in Devices:
+            unit += 1
+    else:
+        # Devices is a global in the plugin context
+        while unit in Devices:
+            unit += 1
     
     # Store the mapping
     device_mapping[key] = unit
