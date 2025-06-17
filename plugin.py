@@ -7,12 +7,6 @@
         <param field="Address" label="IP Address" width="200px" required="true" default="192.168.1.100"/>
         <param field="Port" label="Port" width="30px" required="true" default="7070"/>
         <param field="Password" label="Password (if auth enabled)" width="200px" required="false" default="" password="true"/>
-        <param field="Mode1" label="Use WebSocket" width="75px">
-            <options>
-                <option label="Yes" value="1" default="true"/>
-                <option label="No" value="0"/>
-            </options>
-        </param>
         <param field="Mode2" label="Update interval (seconds)" width="30px" required="true" default="60"/>
         <param field="Mode6" label="Debug" width="200px">
             <options>
@@ -63,11 +57,6 @@ class BasePlugin:
         if Parameters["Mode2"] != "":
             self.update_interval = int(Parameters["Mode2"])
         
-        # Whether to use WebSocket
-        if Parameters["Mode1"] == "0":
-            self.use_websocket = False
-            Domoticz.Log("WebSocket support disabled by configuration")
-        
         # Set Debugging
         Domoticz.Debugging(int(Parameters["Mode6"]))
         
@@ -104,12 +93,6 @@ class BasePlugin:
 
     def _initialize_websocket(self):
         """Initialize WebSocket connection"""
-        if not websocket_available:
-            Domoticz.Log("WebSocket support is not available. Will use REST API instead.")
-            Domoticz.Log("Please install websocket-client package if you want WebSocket support.")
-            self.use_websocket = False
-            return False
-            
         ws_connected = self.api.connect_websocket(keep_connection=True)
         if not ws_connected:
             if self.ws_retry_count < self.max_ws_retries:
