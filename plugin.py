@@ -7,6 +7,12 @@
         <param field="Address" label="IP Address" width="200px" required="true" default="192.168.1.100"/>
         <param field="Port" label="Port" width="30px" required="true" default="7070"/>
         <param field="Password" label="Password (if auth enabled)" width="200px" required="false" default="" password="true"/>
+        <param field="Mode1" label="Use WebSocket" width="75px">
+            <options>
+                <option label="Yes" value="1" default="true"/>
+                <option label="No" value="0"/>
+            </options>
+        </param>
         <param field="Mode2" label="Update interval (seconds)" width="30px" required="true" default="60"/>
         <param field="Mode6" label="Debug" width="200px">
             <options>
@@ -42,6 +48,13 @@ class BasePlugin:
         self.run_again = 6
         self.update_interval = DEFAULT_UPDATE_INTERVAL
         self.use_websocket = True
+        self.last_websocket_update = 0
+        self.last_device_update = 0
+        self.last_data = None
+        self.min_websocket_update_interval = 5  # Minimum seconds between updates
+        self.ws_initialized = False  # Track if WebSocket has been initialized
+        self.ws_retry_count = 0
+        self.max_ws_retries = 3  # Maximum number of WebSocket reconnection attempts
         
     def onStart(self):
         Domoticz.Debug("onStart called")
@@ -49,6 +62,11 @@ class BasePlugin:
         # Set update interval from parameters
         if Parameters["Mode2"] != "":
             self.update_interval = int(Parameters["Mode2"])
+        
+        # Whether to use WebSocket
+        if Parameters["Mode1"] == "0":
+            self.use_websocket = False
+            Domoticz.Log("WebSocket support disabled by configuration")
         
         # Set Debugging
         Domoticz.Debugging(int(Parameters["Mode6"]))
@@ -70,16 +88,107 @@ class BasePlugin:
         if Parameters["Password"] != "":
             self.api.login()
         
-        # Connect to WebSocket if required
+        # Initialize WebSocket if enabled
         if self.use_websocket:
-            self.api.connect_websocket()
+            self._initialize_websocket()
         
         # Fetch initial state to create devices
         self._get_initial_state()
         
-        # Configure heartbeat
-        Domoticz.Heartbeat(10)
+        # Configure heartbeat - use a more frequent heartbeat if using WebSocket
+        # so we can check for new data often, while still respecting update_interval for REST API
+        if self.use_websocket:
+            Domoticz.Heartbeat(2)  # Check for new WebSocket data every 2 seconds
+        else:
+            Domoticz.Heartbeat(10)  # Use standard 10-second interval for REST API
 
+    def _initialize_websocket(self):
+        """Initialize WebSocket connection"""
+        if not websocket_available:
+            Domoticz.Log("WebSocket support is not available. Will use REST API instead.")
+            Domoticz.Log("Please install websocket-client package if you want WebSocket support.")
+            self.use_websocket = False
+            return False
+            
+        ws_connected = self.api.connect_websocket(keep_connection=True)
+        if not ws_connected:
+            if self.ws_retry_count < self.max_ws_retries:
+                self.ws_retry_count += 1
+                Domoticz.Log(f"Failed to connect to WebSocket (attempt {self.ws_retry_count}/{self.max_ws_retries}). Will retry...")
+                return False
+            else:
+                Domoticz.Log("Failed to connect to WebSocket after multiple attempts. Will use REST API instead.")
+                self.use_websocket = False
+                return False
+            
+        Domoticz.Log("WebSocket connected successfully. Will receive real-time updates.")
+        self.ws_initialized = True
+        self.ws_retry_count = 0  # Reset retry count on successful connection
+        return True
+
+    def onHeartbeat(self):
+        current_time = time.time()
+        
+        # For WebSocket mode, check if we have new data available
+        if self.use_websocket:
+            # Check WebSocket connection and try to reconnect if needed
+            if not self.api.ws_connected:
+                if self.ws_retry_count < self.max_ws_retries:
+                    if not self._initialize_websocket():
+                        # If reconnection fails, try again next heartbeat
+                        return
+                else:
+                    # If we've exceeded retry attempts, fall back to REST API
+                    self.use_websocket = False
+                    self.update_devices_rest()
+                    return
+                
+            # Check if we have new WebSocket data
+            if self.api.ws_connected and self.api.ws_last_data:
+                # Only update if we have new data and enough time has passed
+                if (self.api.ws_last_data != self.last_data and 
+                    current_time - self.last_websocket_update >= self.min_websocket_update_interval):
+                    # Update data and process changes
+                    self.last_data = self.api.ws_last_data.copy()  # Make a copy to detect future changes
+                    self.last_websocket_update = current_time
+                    self.update_devices()
+                    self.ws_retry_count = 0  # Reset retry count on successful update
+        else:
+            # For REST API mode, use the standard interval
+            self.run_again -= 1
+            if self.run_again <= 0:
+                self.run_again = self.update_interval / 10  # Set for next update interval
+                self.update_devices_rest()
+    
+    def update_devices_rest(self):
+        """Update devices using REST API"""
+        try:
+            state = self.api.get_state()
+            if state:
+                self.last_data = state
+                self._update_devices_from_rest_api_data(state)
+        except Exception as e:
+            Domoticz.Error(f"Error updating devices via REST API: {str(e)}")
+
+    def update_devices(self):
+        """Update devices with current data"""
+        if not self.last_data:
+            return
+            
+        try:
+            # Check for loadpoint structure that's common in WebSocket format
+            has_loadpoint_prefix = any(key.startswith("loadpoints.") for key in self.last_data)
+                
+            if has_loadpoint_prefix:
+                # This is a flat structure from WebSocket
+                self._update_devices_from_websocket_data(self.last_data)
+            else:
+                # This is the original REST API nested structure
+                self._update_devices_from_rest_api_data(self.last_data)
+                    
+        except Exception as e:
+            Domoticz.Error(f"Error updating devices: {str(e)}")
+    
     def _get_initial_state(self):
         """Fetch initial state to discover devices"""
         try:
@@ -218,29 +327,31 @@ class BasePlugin:
         if self.api:
             self.api.logout()
 
-    def onHeartbeat(self):
-        self.run_again -= 1
-        if self.run_again <= 0:
-            self.run_again = self.update_interval / 10  # Set for next update interval
-            self.update_devices()
+    def update_devices_rest(self):
+        """Update devices using REST API"""
+        try:
+            state = self.api.get_state()
+            if state:
+                self.last_data = state
+                self._update_devices_from_rest_api_data(state)
+        except Exception as e:
+            Domoticz.Error(f"Error updating devices via REST API: {str(e)}")
 
     def update_devices(self):
-        """Update all device values from EVCC API"""
-        try:
-            # Get the EVCC system state
-            state = self.api.get_state()
-            if not state:
-                return
+        """Update devices with current data"""
+        if not self.last_data:
+            return
             
+        try:
             # Check for loadpoint structure that's common in WebSocket format
-            has_loadpoint_prefix = any(key.startswith("loadpoints.") for key in state)
+            has_loadpoint_prefix = any(key.startswith("loadpoints.") for key in self.last_data)
                 
             if has_loadpoint_prefix:
                 # This is a flat structure from WebSocket
-                self._update_devices_from_websocket_data(state)
+                self._update_devices_from_websocket_data(self.last_data)
             else:
                 # This is the original REST API nested structure
-                self._update_devices_from_rest_api_data(state)
+                self._update_devices_from_rest_api_data(self.last_data)
                     
         except Exception as e:
             Domoticz.Error(f"Error updating devices: {str(e)}")

@@ -36,13 +36,16 @@ class EVCCApi:
         self.auth_cookie = None
         self.ws = None
         self.ws_connected = False
-        self.ws_last_data = None
+        self.ws_last_data = {}  # Change to dict for better merging
+        self.ws_temp_data = {}  # Temporary storage for partial updates
         self.ws_error = None
         self.ws_reconnect_interval = 60  # Reconnect every 60 seconds if connection lost
         self.ws_thread = None
         self.ws_last_log_time = 0
         self.ws_log_interval = 60  # Log only once per minute to avoid log spam
         self.ws_keep_connection = False  # Whether to keep WebSocket connection open
+        self.last_complete_update = 0
+        self.min_complete_update_interval = 5  # Minimum seconds between complete updates
         
     def login(self):
         """Login to EVCC API if password is provided"""
@@ -119,49 +122,52 @@ class EVCCApi:
                 cookie_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
                 headers["Cookie"] = cookie_str
             
-            # Flag to track if we've received a complete state update
+            # Reset state flags
             self.received_complete_state = False
+            self.ws_last_data = {}
+            self.ws_temp_data = {}
             
             # Define WebSocket callbacks
             def on_message(ws, message):
                 try:
                     # Parse the JSON message
                     data = json.loads(message)
+                    current_time = time.time()
                     
-                    # Determine if this is a partial update or complete state
+                    # Determine if this is a complete state update
+                    # Complete updates typically include multiple key indicators
+                    complete_state_indicators = {"pvPower", "grid", "homePower", "loadpoints.0"}
                     is_complete_state = False
                     
-                    # Check if this is a complete state update
-                    # Complete updates typically include pvPower, grid, or specific identifiers
-                    if any(key in data for key in ["pvPower", "grid", "homePower", "version", "vehicles"]):
-                        is_complete_state = True
-                    
-                    # Log only complete state updates or once per minute for partial updates
-                    current_time = time.time()
-                    if is_complete_state:
-                        Domoticz.Debug("Complete WebSocket state update received")
-                        self.ws_last_data = data
-                        self.received_complete_state = True
+                    if isinstance(data, dict):
+                        present_indicators = complete_state_indicators.intersection(data.keys())
+                        is_complete_state = len(present_indicators) >= 2  # Consider complete if 2+ indicators present
                         
-                        # If we're in "one-time update" mode and we got a complete state,
-                        # close the connection after a short delay
-                        if not self.ws_keep_connection:
-                            Domoticz.Log("Received complete state, closing one-time WebSocket connection")
-                            # Start a timer to close the connection after a short delay
-                            # to allow for any immediate follow-up messages
-                            threading.Timer(2.0, self.close_websocket).start()
-                    else:
-                        # For partial updates, limit logging to reduce spam
-                        if (current_time - self.ws_last_log_time) > self.ws_log_interval:
-                            self.ws_last_log_time = current_time
-                            Domoticz.Debug(f"Partial WebSocket update received with keys: {', '.join(list(data.keys())[:5])}...")
-                        
-                        # Merge partial updates with last complete state if available
-                        if self.ws_last_data:
-                            self.ws_last_data.update(data)
+                        if is_complete_state and (current_time - self.last_complete_update) >= self.min_complete_update_interval:
+                            self.last_complete_update = current_time
+                            self.ws_last_data = data.copy()  # Store complete state
+                            self.ws_temp_data = {}  # Clear temporary data
+                            self.received_complete_state = True
+                            Domoticz.Debug("Complete WebSocket state update received")
+                            
+                            # Handle one-time connection mode
+                            if not self.ws_keep_connection:
+                                Domoticz.Log("Received complete state, closing one-time WebSocket connection")
+                                threading.Timer(2.0, self.close_websocket).start()
                         else:
-                            # If no previous state, store this as the base state
-                            self.ws_last_data = data
+                            # Handle partial update
+                            # Store in temporary buffer first
+                            self.ws_temp_data.update(data)
+                            
+                            # Only merge temp data periodically to avoid excessive updates
+                            if self.ws_last_data and (current_time - self.last_complete_update) >= 2:
+                                # Merge temporary data into last complete state
+                                self.ws_last_data.update(self.ws_temp_data)
+                                self.ws_temp_data = {}  # Clear temporary buffer
+                                
+                                if (current_time - self.ws_last_log_time) > self.ws_log_interval:
+                                    self.ws_last_log_time = current_time
+                                    Domoticz.Debug(f"Merged partial WebSocket updates with last complete state")
                     
                 except Exception as e:
                     Domoticz.Error(f"Error parsing WebSocket data: {str(e)}")
@@ -172,12 +178,17 @@ class EVCCApi:
                 
             def on_close(ws, close_status_code, close_msg):
                 self.ws_connected = False
-                Domoticz.Log("WebSocket connection closed")
+                if close_status_code or close_msg:
+                    Domoticz.Log(f"WebSocket connection closed: {close_status_code} - {close_msg}")
+                else:
+                    Domoticz.Log("WebSocket connection closed")
                 
             def on_open(ws):
                 self.ws_connected = True
                 self.ws_error = None
-                self.ws_last_data = None  # Reset data on new connection
+                self.ws_last_data = {}  # Reset data on new connection
+                self.ws_temp_data = {}  # Reset temporary data
+                self.last_complete_update = 0  # Reset update timestamp
                 Domoticz.Log("WebSocket connection established")
             
             # Create WebSocket instance
