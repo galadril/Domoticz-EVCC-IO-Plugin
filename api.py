@@ -130,17 +130,12 @@ class EVCCApi:
             # Define WebSocket callbacks
             def on_message(ws, message):
                 try:
-                    # Parse and log the JSON message
+                    # Parse the JSON message
                     data = json.loads(message)
                     current_time = time.time()
                     
-                    # Log the received data with proper formatting and line breaks
-                    log_message = f"\nWebSocket received data:\n{json.dumps(data, indent=2, ensure_ascii=False)}\n"
-                    # Split long messages into chunks to avoid truncation
-                    chunk_size = 1000
-                    for i in range(0, len(log_message), chunk_size):
-                        chunk = log_message[i:i + chunk_size]
-                        Domoticz.Debug(chunk)
+                    # Log the received data as a single line
+                    Domoticz.Debug(f"WebSocket data: {json.dumps(data)}")
                     
                     # Determine if this is a complete state update
                     # Complete updates typically include multiple key indicators
@@ -157,11 +152,8 @@ class EVCCApi:
                             self.ws_temp_data = {}  # Clear temporary data
                             self.received_complete_state = True
                             
-                            # Log complete state update with proper formatting
-                            log_message = f"\nComplete WebSocket state update received:\n{json.dumps(self.ws_last_data, indent=2, ensure_ascii=False)}\n"
-                            for i in range(0, len(log_message), chunk_size):
-                                chunk = log_message[i:i + chunk_size]
-                                Domoticz.Debug(chunk)
+                            # Log complete state as a single line
+                            Domoticz.Debug(f"Complete state: {json.dumps(self.ws_last_data)}")
                             
                             # Handle one-time connection mode
                             if not self.ws_keep_connection:
@@ -182,11 +174,8 @@ class EVCCApi:
                                 
                                 if (current_time - self.ws_last_log_time) > self.ws_log_interval:
                                     self.ws_last_log_time = current_time
-                                    # Log merged updates with proper formatting
-                                    log_message = f"\nMerged partial WebSocket updates:\n{json.dumps(merged_data, indent=2, ensure_ascii=False)}\n"
-                                    for i in range(0, len(log_message), chunk_size):
-                                        chunk = log_message[i:i + chunk_size]
-                                        Domoticz.Debug(chunk)
+                                    # Log merged updates as a single line
+                                    Domoticz.Debug(f"Merged updates: {json.dumps(merged_data)}")
                     
                 except Exception as e:
                     Domoticz.Error(f"Error parsing WebSocket data: {str(e)}\nRaw message: {message}")
@@ -297,7 +286,7 @@ class EVCCApi:
         """
         # Check if we already have WebSocket data
         if self.ws_connected and self.ws_last_data:
-            Domoticz.Debug(f"Using cached WebSocket data: {json.dumps(self.ws_last_data, indent=2)}")
+            Domoticz.Debug(f"Using cached WebSocket data: {json.dumps(self.ws_last_data)}")
             return self.ws_last_data
         
         # If WebSocket requested and available, try to use it
@@ -308,12 +297,12 @@ class EVCCApi:
                 
                 # If connection successful and we have data...
                 if self.ws_connected and self.ws_last_data:
-                    Domoticz.Debug(f"Using new WebSocket data: {json.dumps(self.ws_last_data, indent=2)}")
+                    Domoticz.Debug(f"Using new WebSocket data: {json.dumps(self.ws_last_data)}")
                     return self.ws_last_data
                 
                 # If one-time connection closed but we got data...
                 if not self.ws_connected and not keep_connection and self.ws_last_data:
-                    Domoticz.Debug(f"Using one-time WebSocket data: {json.dumps(self.ws_last_data, indent=2)}")
+                    Domoticz.Debug(f"Using one-time WebSocket data: {json.dumps(self.ws_last_data)}")
                     return self.ws_last_data
         
         # Fall back to REST API if WebSocket not available or failed
@@ -328,8 +317,8 @@ class EVCCApi:
 
             data = response.json()
             
-            # Log the REST API response
-            Domoticz.Debug(f"REST API response: {json.dumps(data, indent=2)}")
+            # Log the REST API response as a single line
+            Domoticz.Debug(f"REST API response: {json.dumps(data)}")
             
             # Check if this is data or result.data
             if "result" in data:
