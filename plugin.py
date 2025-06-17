@@ -83,7 +83,7 @@ class BasePlugin:
                 
             # Create site devices
             if "site" in state:
-                self.device_manager.create_site_devices(state["site"])
+                self.device_manager.create_site_devices(state["site"], Devices)
                 
             # Create loadpoint devices
             if "loadpoints" in state:
@@ -93,13 +93,13 @@ class BasePlugin:
                         loadpoint_id = i + 1
                         if isinstance(loadpoint, dict):
                             self.device_manager.loadpoints[loadpoint_id] = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
-                            self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint)
+                            self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint, Devices)
                 elif isinstance(loadpoints, dict):
                     for loadpoint_id_str, loadpoint in loadpoints.items():
                         loadpoint_id = len(self.device_manager.loadpoints) + 1
                         if isinstance(loadpoint, dict):
                             self.device_manager.loadpoints[loadpoint_id] = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
-                            self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint)
+                            self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint, Devices)
             
             # Create vehicle devices
             if "vehicles" in state:
@@ -110,7 +110,7 @@ class BasePlugin:
                         if isinstance(vehicle, dict):
                             vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {vehicle_id}"))
                             self.device_manager.vehicles[vehicle_id] = vehicle_name
-                            self.device_manager.create_vehicle_devices(vehicle_id, vehicle)
+                            self.device_manager.create_vehicle_devices(vehicle_id, vehicle, Devices)
                 elif isinstance(vehicles, dict):
                     vehicle_index = 1
                     for vehicle_id_str, vehicle in vehicles.items():
@@ -118,7 +118,7 @@ class BasePlugin:
                             vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {vehicle_index}"))
                             self.device_manager.vehicles[vehicle_index] = vehicle_name
                             vehicle["original_id"] = vehicle_id_str
-                            self.device_manager.create_vehicle_devices(vehicle_index, vehicle)
+                            self.device_manager.create_vehicle_devices(vehicle_index, vehicle, Devices)
                             vehicle_index += 1
             
         except Exception as e:
@@ -131,6 +131,9 @@ class BasePlugin:
 
     def onHeartbeat(self):
         self.run_again -= 1
+
+
+
         if self.run_again <= 0:
             self.run_again = self.update_interval / 10  # Set for next update interval
             self.update_devices()
@@ -146,11 +149,11 @@ class BasePlugin:
             # Update site and battery information
             if "site" in state:
                 site_data = state["site"]
-                self.device_manager.update_site_devices(site_data)
+                self.device_manager.update_site_devices(site_data, Devices)
                 
                 # Update battery devices if present
                 if self.device_manager.battery_present:
-                    self.device_manager.update_battery_devices(site_data)
+                    self.device_manager.update_battery_devices(site_data, Devices)
             
             # Update vehicle information
             if "vehicles" in state:
@@ -162,8 +165,8 @@ class BasePlugin:
                             if vehicle_id not in self.device_manager.vehicles:
                                 vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {vehicle_id}"))
                                 self.device_manager.vehicles[vehicle_id] = vehicle_name
-                                self.device_manager.create_vehicle_devices(vehicle_id, vehicle)
-                            self.device_manager.update_vehicle_devices(vehicle_id, vehicle)
+                                self.device_manager.create_vehicle_devices(vehicle_id, vehicle, Devices)
+                            self.device_manager.update_vehicle_devices(vehicle_id, vehicle, Devices)
                 elif isinstance(vehicles, dict):
                     for vehicle_id_str, vehicle in vehicles.items():
                         our_vehicle_id = None
@@ -180,9 +183,9 @@ class BasePlugin:
                                     "original_id": vehicle_id_str
                                 }
                                 vehicle["original_id"] = vehicle_id_str
-                                self.device_manager.create_vehicle_devices(our_vehicle_id, vehicle)
+                                self.device_manager.create_vehicle_devices(our_vehicle_id, vehicle, Devices)
                         if isinstance(vehicle, dict):
-                            self.device_manager.update_vehicle_devices(our_vehicle_id, vehicle)
+                            self.device_manager.update_vehicle_devices(our_vehicle_id, vehicle, Devices)
             
             # Update loadpoint information
             if "loadpoints" in state:
@@ -194,8 +197,8 @@ class BasePlugin:
                             if loadpoint_id not in self.device_manager.loadpoints:
                                 loadpoint_name = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
                                 self.device_manager.loadpoints[loadpoint_id] = loadpoint_name
-                                self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint)
-                            self.device_manager.update_loadpoint_devices(loadpoint_id, loadpoint)
+                                self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint, Devices)
+                            self.device_manager.update_loadpoint_devices(loadpoint_id, loadpoint, Devices)
                 elif isinstance(loadpoints, dict):
                     for loadpoint_id_str, loadpoint in loadpoints.items():
                         our_loadpoint_id = None
@@ -211,9 +214,9 @@ class BasePlugin:
                                     "name": loadpoint_name,
                                     "original_id": loadpoint_id_str
                                 }
-                                self.device_manager.create_loadpoint_devices(our_loadpoint_id, loadpoint)
+                                self.device_manager.create_loadpoint_devices(our_loadpoint_id, loadpoint, Devices)
                         if isinstance(loadpoint, dict):
-                            self.device_manager.update_loadpoint_devices(our_loadpoint_id, loadpoint)
+                            self.device_manager.update_loadpoint_devices(our_loadpoint_id, loadpoint, Devices)
                     
         except Exception as e:
             Domoticz.Error(f"Error updating devices: {str(e)}")

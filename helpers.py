@@ -21,6 +21,7 @@ def extract_device_info_from_description(description):
 
 def update_device_value(unit, n_value, s_value):
     """Helper method to update device values"""
+    # Devices is a global in the plugin context, so we can use it directly here
     if unit not in Devices:
         Domoticz.Error(f"Device unit {unit} does not exist")
         return
@@ -64,6 +65,7 @@ def get_device_unit(device_mapping, unit_device_mapping, device_type, device_id,
     
     # Find the next available unit number
     unit = base_unit
+    # Devices is a global in the plugin context
     while unit in Devices:
         unit += 1
     
