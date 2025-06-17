@@ -269,4 +269,189 @@ class EVCCApi:
                 
             except Exception as e:
                 Domoticz.Error(f"Error closing WebSocket: {str(e)}")
-               
+    
+    def get_state(self, use_websocket=True, keep_connection=False):
+        """Get the current state of the EVCC system
+        
+        Args:
+            use_websocket: Whether to try WebSocket first
+            keep_connection: If using WebSocket, whether to keep the connection open
+                             after getting data (uses more resources but faster updates)
+        """
+        # Check if we already have WebSocket data
+        if self.ws_connected and self.ws_last_data:
+            return self.ws_last_data
+        
+        # If WebSocket requested and available, try to use it
+        if use_websocket and websocket_available:
+            if not self.ws_connected:
+                # Connect, specifying whether to keep connection open
+                self.connect_websocket(keep_connection=keep_connection)
+                
+                # If connection successful and we have data...
+                if self.ws_connected and self.ws_last_data:
+                    return self.ws_last_data
+                
+                # If one-time connection closed but we got data...
+                if not self.ws_connected and not keep_connection and self.ws_last_data:
+                    return self.ws_last_data
+        
+        # Fall back to REST API if WebSocket not available or failed
+        try:
+            cookies = self.get_cookies()
+            
+            response = requests.get(f"{self.base_url}/state", cookies=cookies)
+            
+            if response.status_code != 200:
+                Domoticz.Error(f"Failed to get EVCC state: {response.status_code}")
+                return None
+
+            data = response.json()
+            
+            # Check if this is data or result.data
+            if "result" in data:
+                return data["result"]
+            else:
+                return data
+                
+        except Exception as e:
+            Domoticz.Error(f"Error getting EVCC state: {str(e)}")
+            return None  
+
+    def get_state(self, use_websocket=True, keep_connection=False):
+        """Get the current state of the EVCC system
+        
+        Args:
+            use_websocket: Whether to try WebSocket first
+            keep_connection: If using WebSocket, whether to keep the connection open
+                             after getting data (uses more resources but faster updates)
+        """
+        # Check if we already have WebSocket data
+        if self.ws_connected and self.ws_last_data:
+            return self.ws_last_data
+        
+        # If WebSocket requested and available, try to use it
+        if use_websocket and websocket_available:
+            if not self.ws_connected:
+                # Connect, specifying whether to keep connection open
+                self.connect_websocket(keep_connection=keep_connection)
+                
+                # If connection successful and we have data...
+                if self.ws_connected and self.ws_last_data:
+                    return self.ws_last_data
+                
+                # If one-time connection closed but we got data...
+                if not self.ws_connected and not keep_connection and self.ws_last_data:
+                    return self.ws_last_data
+        
+        # Fall back to REST API if WebSocket not available or failed
+        try:
+            cookies = self.get_cookies()
+            
+            response = requests.get(f"{self.base_url}/state", cookies=cookies)
+            
+            if response.status_code != 200:
+                Domoticz.Error(f"Failed to get EVCC state: {response.status_code}")
+                return None
+
+            data = response.json()
+            
+            # Check if this is data or result.data
+            if "result" in data:
+                return data["result"]
+            else:
+                return data
+                
+        except Exception as e:
+            Domoticz.Error(f"Error getting EVCC state: {str(e)}")
+            return None
+            
+    def set_loadpoint_mode(self, loadpoint_id, mode):
+        """Set charging mode for a loadpoint"""
+        try:
+            cookies = self.get_cookies()
+            response = requests.post(
+                f"{self.base_url}/loadpoints/{loadpoint_id}/mode/{mode}", 
+                cookies=cookies
+            )
+            if response.status_code == 200:
+                Domoticz.Log(f"Successfully changed charging mode to {mode} for loadpoint {loadpoint_id}")
+                return True
+            else:
+                Domoticz.Error(f"Failed to change charging mode: {response.status_code}")
+                return False
+        except Exception as e:
+            Domoticz.Error(f"Error setting loadpoint mode: {str(e)}")
+            return False
+            
+    def set_loadpoint_phases(self, loadpoint_id, phases):
+        """Set number of phases for a loadpoint"""
+        try:
+            cookies = self.get_cookies()
+            response = requests.post(
+                f"{self.base_url}/loadpoints/{loadpoint_id}/phases/{phases}", 
+                cookies=cookies
+            )
+            if response.status_code == 200:
+                Domoticz.Log(f"Successfully changed charging phases to {phases} for loadpoint {loadpoint_id}")
+                return True
+            else:
+                Domoticz.Error(f"Failed to change charging phases: {response.status_code}")
+                return False
+        except Exception as e:
+            Domoticz.Error(f"Error setting loadpoint phases: {str(e)}")
+            return False
+            
+    def set_loadpoint_min_soc(self, loadpoint_id, min_soc):
+        """Set minimum SoC for a loadpoint"""
+        try:
+            cookies = self.get_cookies()
+            response = requests.post(
+                f"{self.base_url}/loadpoints/{loadpoint_id}/minsoc/{min_soc}", 
+                cookies=cookies
+            )
+            if response.status_code == 200:
+                Domoticz.Log(f"Successfully changed min SoC to {min_soc} for loadpoint {loadpoint_id}")
+                return True
+            else:
+                Domoticz.Error(f"Failed to change min SoC: {response.status_code}")
+                return False
+        except Exception as e:
+            Domoticz.Error(f"Error setting min SoC: {str(e)}")
+            return False
+            
+    def set_loadpoint_target_soc(self, loadpoint_id, target_soc):
+        """Set target SoC for a loadpoint"""
+        try:
+            cookies = self.get_cookies()
+            response = requests.post(
+                f"{self.base_url}/loadpoints/{loadpoint_id}/limitsoc/{target_soc}", 
+                cookies=cookies
+            )
+            if response.status_code == 200:
+                Domoticz.Log(f"Successfully changed target SoC to {target_soc} for loadpoint {loadpoint_id}")
+                return True
+            else:
+                Domoticz.Error(f"Failed to change target SoC: {response.status_code}")
+                return False
+        except Exception as e:
+            Domoticz.Error(f"Error setting target SoC: {str(e)}")
+            return False
+            
+    def set_battery_mode(self, mode):
+        """Set battery operating mode"""
+        try:
+            cookies = self.get_cookies()
+            response = requests.post(
+                f"{self.base_url}/batterymode/{mode}", 
+                cookies=cookies
+            )
+            if response.status_code == 200:
+                Domoticz.Log(f"Successfully changed battery mode to {mode}")
+                return True
+            else:
+                Domoticz.Error(f"Failed to change battery mode: {response.status_code}")
+                return False
+        except Exception as e:
+            Domoticz.Error(f"Error setting battery mode: {str(e)}")
+            return False
