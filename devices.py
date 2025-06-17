@@ -24,6 +24,7 @@ class DeviceManager:
         self.loadpoints = {}
         self.vehicles = {}
         self.battery_present = False
+        self.pv_systems = {}
         
         # Load existing device mappings will be done in onStart
         # after Devices are available
@@ -97,6 +98,10 @@ class DeviceManager:
                         loadpoint_name = device.Name.replace(" Charged Energy", "")
                         if int_id not in self.loadpoints or isinstance(self.loadpoints[int_id], dict):
                             self.loadpoints[int_id] = loadpoint_name
+                            
+                # Track if we have battery devices
+                if device_type == "battery":
+                    self.battery_present = True
                 
                 Domoticz.Debug(f"Loaded device mapping: {key} -> Unit {unit}")
                 if device.DeviceID:
@@ -111,6 +116,12 @@ class DeviceManager:
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="Grid Power", Type=243, Subtype=29, 
                                Used=1, Description="site_1_grid_power").Create()
+        elif "grid" in site_data and isinstance(site_data["grid"], dict) and "power" in site_data["grid"]:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "site", 1, "grid_power", True, Devices)
+            if unit not in Devices:
+                Domoticz.Device(Unit=unit, Name="Grid Power", Type=243, Subtype=29, 
+                              Used=1, Description="site_1_grid_power").Create()
         
         # Home power
         if "homePower" in site_data:
@@ -127,11 +138,36 @@ class DeviceManager:
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="PV Power", Type=243, Subtype=29, 
                                Used=1, Description="site_1_pv_power").Create()
+        
+        # Create PV system devices if available
+        if "pv" in site_data and isinstance(site_data["pv"], list) and len(site_data["pv"]) > 0:
+            self.create_pv_devices(site_data, Devices)
                 
         # Battery Domoticz.Devices if present
-        if "batteryPower" in site_data or "batterySoc" in site_data:
+        if any(key in site_data for key in ["batteryPower", "batterySoc", "batteryMode"]):
             self.battery_present = True
             self.create_battery_devices(site_data, Devices)
+        # Check for battery array in WebSocket format
+        elif "battery" in site_data and isinstance(site_data["battery"], list):
+            self.battery_present = True
+            self.create_battery_devices_from_array(site_data, Devices)
+    
+    def create_pv_devices(self, site_data, Devices):
+        """Create PV system devices"""
+        pv_systems = site_data.get("pv", [])
+        
+        for i, pv_system in enumerate(pv_systems):
+            pv_id = i + 1
+            pv_name = pv_system.get("title", f"PV System {pv_id}")
+            self.pv_systems[pv_id] = pv_name
+            
+            # PV System Power
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                  "pv", pv_id, "power", True, Devices)
+            if unit not in Devices:
+                Domoticz.Log(f"Creating device '{pv_name} Power'.")
+                Domoticz.Device(Unit=unit, Name=f"{pv_name} Power", Type=243, Subtype=29, 
+                               Used=1, Description=f"pv_{pv_id}_power").Create()
     
     def create_battery_devices(self, site_data, Devices):
         """Create battery Domoticz.Devices"""
@@ -163,6 +199,35 @@ class DeviceManager:
                 Domoticz.Device(Unit=unit, Name="Battery Mode", Type=244, Subtype=62, 
                               Switchtype=18, Image=9, Options=Options, Used=1, 
                               Description="battery_1_mode").Create()
+    
+    def create_battery_devices_from_array(self, site_data, Devices):
+        """Create battery devices from the WebSocket battery array format"""
+        battery_array = site_data.get("battery", [])
+        
+        if not battery_array:
+            return
+        
+        for i, battery in enumerate(battery_array):
+            battery_id = i + 1
+            battery_name = battery.get("title", f"Battery {battery_id}")
+            
+            # Battery power
+            if "power" in battery:
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                    "battery", battery_id, "power", True, Devices)
+                if unit not in Devices:
+                    Domoticz.Log(f"Creating device '{battery_name} Power'.")
+                    Domoticz.Device(Unit=unit, Name=f"{battery_name} Power", Type=243, Subtype=29, 
+                                  Used=1, Description=f"battery_{battery_id}_power").Create()
+                    
+            # Battery SoC
+            if "soc" in battery:
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                    "battery", battery_id, "soc", True, Devices)
+                if unit not in Devices:
+                    Domoticz.Log(f"Creating device '{battery_name} State of Charge'.")
+                    Domoticz.Device(Unit=unit, Name=f"{battery_name} State of Charge", Type=243, Subtype=6, 
+                                  Used=1, Description=f"battery_{battery_id}_soc").Create()
     
     def create_vehicle_devices(self, vehicle_id, vehicle_data, Devices):
         """Create Domoticz.Devices for a vehicle"""
@@ -322,12 +387,17 @@ class DeviceManager:
     
     def update_site_devices(self, site_data, Devices):
         """Update site Domoticz.Devices"""
-        # Grid power
+        # Grid power - handle both formats (direct or nested in grid object)
         if "gridPower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                   "site", 1, "grid_power", False, Devices)
             if unit is not None:
                 update_device_value(unit, 0, site_data["gridPower"], Devices)
+        elif "grid" in site_data and isinstance(site_data["grid"], dict) and "power" in site_data["grid"]:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                  "site", 1, "grid_power", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, site_data["grid"]["power"], Devices)
         
         # Home power
         if "homePower" in site_data:
@@ -342,6 +412,24 @@ class DeviceManager:
                                   "site", 1, "pv_power", False, Devices)
             if unit is not None:
                 update_device_value(unit, 0, site_data["pvPower"], Devices)
+        
+        # Update PV system devices if available
+        if "pv" in site_data and isinstance(site_data["pv"], list) and len(site_data["pv"]) > 0:
+            self.update_pv_devices(site_data, Devices)
+    
+    def update_pv_devices(self, site_data, Devices):
+        """Update PV system devices"""
+        pv_systems = site_data.get("pv", [])
+        
+        for i, pv_system in enumerate(pv_systems):
+            pv_id = i + 1
+            
+            # PV System Power
+            if "power" in pv_system:
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                      "pv", pv_id, "power", False, Devices)
+                if unit is not None:
+                    update_device_value(unit, 0, pv_system["power"], Devices)
     
     def update_battery_devices(self, site_data, Devices):
         """Update battery Domoticz.Devices"""
@@ -371,6 +459,30 @@ class DeviceManager:
                 elif battery_mode == "charge": mode_value = 30
                 elif battery_mode == "external": mode_value = 40
                 update_device_value(unit, mode_value, 0, Devices)
+    
+    def update_battery_devices_from_array(self, site_data, Devices):
+        """Update battery devices from WebSocket battery array format"""
+        battery_array = site_data.get("battery", [])
+        
+        if not battery_array:
+            return
+        
+        for i, battery in enumerate(battery_array):
+            battery_id = i + 1
+            
+            # Battery power
+            if "power" in battery:
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                      "battery", battery_id, "power", False, Devices)
+                if unit is not None:
+                    update_device_value(unit, 0, battery["power"], Devices)
+                    
+            # Battery SoC
+            if "soc" in battery:
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                      "battery", battery_id, "soc", False, Devices)
+                if unit is not None:
+                    update_device_value(unit, 0, battery["soc"], Devices)
     
     def update_vehicle_devices(self, vehicle_id, vehicle_data, Devices):
         """Update vehicle Domoticz.Devices"""
