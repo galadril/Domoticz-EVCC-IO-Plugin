@@ -93,15 +93,19 @@ class BasePlugin:
                         loadpoint_id = i + 1
                         if isinstance(loadpoint, dict):
                             self.device_manager.loadpoints[loadpoint_id] = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
+                            # Store the original ID in the loadpoint data for API calls
+                            loadpoint["original_id"] = str(loadpoint_id)
                             self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint, Devices)
                 elif isinstance(loadpoints, dict):
+                    loadpoint_index = 1
                     for loadpoint_id_str, loadpoint in loadpoints.items():
-                        loadpoint_id = len(self.device_manager.loadpoints) + 1
                         if isinstance(loadpoint, dict):
+                            loadpoint_name = loadpoint.get("title", f"Loadpoint {loadpoint_index}")
+                            self.device_manager.loadpoints[loadpoint_index] = loadpoint_name
                             # Store the external ID in the loadpoint data
                             loadpoint["original_id"] = loadpoint_id_str
-                            self.device_manager.loadpoints[loadpoint_id] = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
-                            self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint, Devices)
+                            self.device_manager.create_loadpoint_devices(loadpoint_index, loadpoint, Devices)
+                            loadpoint_index += 1
             
             # Create vehicle devices
             if "vehicles" in state:
@@ -112,6 +116,8 @@ class BasePlugin:
                         if isinstance(vehicle, dict):
                             vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {vehicle_id}"))
                             self.device_manager.vehicles[vehicle_id] = vehicle_name
+                            # Store the original ID in the vehicle data for API calls
+                            vehicle["original_id"] = str(vehicle_id)
                             self.device_manager.create_vehicle_devices(vehicle_id, vehicle, Devices)
                 elif isinstance(vehicles, dict):
                     vehicle_index = 1
@@ -165,10 +171,12 @@ class BasePlugin:
                             if vehicle_id not in self.device_manager.vehicles:
                                 vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {vehicle_id}"))
                                 self.device_manager.vehicles[vehicle_id] = vehicle_name
+                                # Store the original ID in the vehicle data for API calls
+                                vehicle["original_id"] = str(vehicle_id)
                                 self.device_manager.create_vehicle_devices(vehicle_id, vehicle, Devices)
                             self.device_manager.update_vehicle_devices(vehicle_id, vehicle, Devices)
                 elif isinstance(vehicles, dict):
-                    # First try to map external IDs to our internal IDs using DeviceID
+                    # First try to find existing vehicles with external IDs
                     vehicle_id_mapping = {}
                     
                     # Scan through existing devices to find vehicles and their external IDs
@@ -179,8 +187,14 @@ class BasePlugin:
                                 internal_id = int(device_info["device_id"])
                                 external_id = Devices[unit].DeviceID
                                 vehicle_id_mapping[external_id] = internal_id
+                                
+                                # Ensure we have a clean name in the vehicles dict
+                                if internal_id in self.device_manager.vehicles and isinstance(self.device_manager.vehicles[internal_id], dict):
+                                    # Extract just the name from the dict if needed
+                                    if "name" in self.device_manager.vehicles[internal_id]:
+                                        self.device_manager.vehicles[internal_id] = self.device_manager.vehicles[internal_id]["name"]
                     
-                    # Process vehicles
+                    # Process vehicles, updating if known or creating if new
                     for vehicle_id_str, vehicle in vehicles.items():
                         if vehicle_id_str in vehicle_id_mapping:
                             # We already know this vehicle, update it
@@ -206,10 +220,12 @@ class BasePlugin:
                             if loadpoint_id not in self.device_manager.loadpoints:
                                 loadpoint_name = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
                                 self.device_manager.loadpoints[loadpoint_id] = loadpoint_name
+                                # Store the original ID in the loadpoint data for API calls
+                                loadpoint["original_id"] = str(loadpoint_id)
                                 self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint, Devices)
                             self.device_manager.update_loadpoint_devices(loadpoint_id, loadpoint, Devices)
                 elif isinstance(loadpoints, dict):
-                    # First try to map external IDs to our internal IDs using DeviceID
+                    # First try to find existing loadpoints with external IDs
                     loadpoint_id_mapping = {}
                     
                     # Scan through existing devices to find loadpoints and their external IDs
@@ -220,8 +236,14 @@ class BasePlugin:
                                 internal_id = int(device_info["device_id"])
                                 external_id = Devices[unit].DeviceID
                                 loadpoint_id_mapping[external_id] = internal_id
+                                
+                                # Ensure we have a clean name in the loadpoints dict
+                                if internal_id in self.device_manager.loadpoints and isinstance(self.device_manager.loadpoints[internal_id], dict):
+                                    # Extract just the name from the dict if needed
+                                    if "name" in self.device_manager.loadpoints[internal_id]:
+                                        self.device_manager.loadpoints[internal_id] = self.device_manager.loadpoints[internal_id]["name"]
                     
-                    # Process loadpoints
+                    # Process loadpoints, updating if known or creating if new
                     for loadpoint_id_str, loadpoint in loadpoints.items():
                         if loadpoint_id_str in loadpoint_id_mapping:
                             # We already know this loadpoint, update it
