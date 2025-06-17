@@ -6,7 +6,7 @@
     <params>
         <param field="Address" label="IP Address" width="200px" required="true" default="192.168.1.100"/>
         <param field="Port" label="Port" width="30px" required="true" default="7070"/>
-        <param field="Mode1" label="Password (if auth enabled)" width="200px" required="false" default="" password="true"/>
+        <param field="Password" label="Password (if auth enabled)" width="200px" required="false" default="" password="true"/>
         <param field="Mode2" label="Update interval (seconds)" width="30px" required="true" default="60"/>
         <param field="Mode6" label="Debug" width="200px">
             <options>
@@ -55,14 +55,14 @@ class BasePlugin:
         self.api = EVCCApi(
             address=Parameters["Address"],
             port=Parameters["Port"],
-            password=Parameters["Mode1"] if Parameters["Mode1"] != "" else None
+            password=Parameters["Password"] if Parameters["Password"] != "" else None
         )
         
         # Initialize device manager
         self.device_manager = DeviceManager()
         
         # If authentication is required, login first
-        if Parameters["Mode1"] != "":
+        if Parameters["Password"] != "":
             self.api.login()
         
         # Fetch initial state to create devices

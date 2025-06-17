@@ -33,8 +33,8 @@ class DeviceManager:
         self.device_unit_mapping = {}
         self.unit_device_mapping = {}
         
-        for unit in Domoticz.Devices:
-            device = Domoticz.Devices[unit]
+        for unit in Devices:
+            device = Devices[unit]
             # Try to extract mappings from device description if it follows our convention
             # Format: {type}_{id}_{parameter}
             match = re.search(r'^([a-z]+)_(\d+)_([a-z_]+)$', device.Description)
