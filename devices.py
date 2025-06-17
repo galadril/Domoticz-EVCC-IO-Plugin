@@ -115,13 +115,13 @@ class DeviceManager:
                                   "site", 1, "grid_power", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="Grid Power", Type=243, Subtype=29, 
-                               Used=1, Description="site_1_grid_power").Create()
+                               Used=0, Description="site_1_grid_power").Create()
         elif "grid" in site_data and isinstance(site_data["grid"], dict) and "power" in site_data["grid"]:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "site", 1, "grid_power", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="Grid Power", Type=243, Subtype=29, 
-                              Used=1, Description="site_1_grid_power").Create()
+                              Used=0, Description="site_1_grid_power").Create()
         
         # Home power
         if "homePower" in site_data:
@@ -129,7 +129,7 @@ class DeviceManager:
                                   "site", 1, "home_power", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="Home Power", Type=243, Subtype=29, 
-                               Used=1, Description="site_1_home_power").Create()
+                               Used=0, Description="site_1_home_power").Create()
                 
         # PV power
         if "pvPower" in site_data:
@@ -137,7 +137,7 @@ class DeviceManager:
                                   "site", 1, "pv_power", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="PV Power", Type=243, Subtype=29, 
-                               Used=1, Description="site_1_pv_power").Create()
+                               Used=0, Description="site_1_pv_power").Create()
         
         # Create PV system devices if available
         if "pv" in site_data and isinstance(site_data["pv"], list) and len(site_data["pv"]) > 0:
@@ -167,7 +167,7 @@ class DeviceManager:
             if unit not in Devices:
                 Domoticz.Log(f"Creating device '{pv_name} Power'.")
                 Domoticz.Device(Unit=unit, Name=f"{pv_name} Power", Type=243, Subtype=29, 
-                               Used=1, Description=f"pv_{pv_id}_power").Create()
+                               Used=0, Description=f"pv_{pv_id}_power").Create()
     
     def create_battery_devices(self, site_data, Devices):
         """Create battery Domoticz.Devices"""
@@ -177,7 +177,7 @@ class DeviceManager:
                                   "battery", 1, "power", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="Battery Power", Type=243, Subtype=29, 
-                               Used=1, Description="battery_1_power").Create()
+                               Used=0, Description="battery_1_power").Create()
                 
         # Battery SoC
         if "batterySoc" in site_data:
@@ -185,7 +185,7 @@ class DeviceManager:
                                   "battery", 1, "soc", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="Battery State of Charge", Type=243, Subtype=6, 
-                               Used=1, Description="battery_1_soc").Create()
+                               Used=0, Description="battery_1_soc").Create()
                 
         # Battery mode
         if "batteryMode" in site_data:
@@ -197,7 +197,7 @@ class DeviceManager:
                           "LevelOffHidden": "false",
                           "SelectorStyle": "0"}
                 Domoticz.Device(Unit=unit, Name="Battery Mode", Type=244, Subtype=62, 
-                              Switchtype=18, Image=9, Options=Options, Used=1, 
+                              Switchtype=18, Image=9, Options=Options, Used=0, 
                               Description="battery_1_mode").Create()
     
     def create_battery_devices_from_array(self, site_data, Devices):
@@ -218,7 +218,7 @@ class DeviceManager:
                 if unit not in Devices:
                     Domoticz.Log(f"Creating device '{battery_name} Power'.")
                     Domoticz.Device(Unit=unit, Name=f"{battery_name} Power", Type=243, Subtype=29, 
-                                  Used=1, Description=f"battery_{battery_id}_power").Create()
+                                  Used=0, Description=f"battery_{battery_id}_power").Create()
                     
             # Battery SoC
             if "soc" in battery:
@@ -227,7 +227,7 @@ class DeviceManager:
                 if unit not in Devices:
                     Domoticz.Log(f"Creating device '{battery_name} State of Charge'.")
                     Domoticz.Device(Unit=unit, Name=f"{battery_name} State of Charge", Type=243, Subtype=6, 
-                                  Used=1, Description=f"battery_{battery_id}_soc").Create()
+                                  Used=0, Description=f"battery_{battery_id}_soc").Create()
     
     def create_vehicle_devices(self, vehicle_id, vehicle_data, Devices):
         """Create Domoticz.Devices for a vehicle"""
@@ -259,7 +259,7 @@ class DeviceManager:
         if unit not in Devices:
             Domoticz.Log(f"Creating device '{vehicle_name} SoC'.")
             Domoticz.Device(Unit=unit, Name=f"{vehicle_name} SoC", Type=243, Subtype=6, 
-                           Used=1, Description=f"vehicle_{vehicle_id}_soc", 
+                           Used=0, Description=f"vehicle_{vehicle_id}_soc", 
                            DeviceID=external_id).Create()
             
         # Vehicle range
@@ -269,7 +269,7 @@ class DeviceManager:
             if unit not in Devices:
                 Domoticz.Log(f"Creating device '{vehicle_name} Range'.")
                 Domoticz.Device(Unit=unit, Name=f"{vehicle_name} Range", Type=243, Subtype=31, 
-                               Used=1, Description=f"vehicle_{vehicle_id}_range", 
+                               Used=0, Description=f"vehicle_{vehicle_id}_range", 
                                DeviceID=external_id).Create()
             
         # Vehicle status
@@ -282,7 +282,7 @@ class DeviceManager:
                       "LevelOffHidden": "false",
                       "SelectorStyle": "0"}
             Domoticz.Device(Unit=unit, Name=f"{vehicle_name} Status", Type=244, Subtype=62, 
-                           Switchtype=18, Image=9, Options=Options, Used=1, 
+                           Switchtype=18, Image=9, Options=Options, Used=0, 
                            Description=f"vehicle_{vehicle_id}_status", 
                            DeviceID=external_id).Create()
     
@@ -316,7 +316,7 @@ class DeviceManager:
         if unit not in Devices:
             Domoticz.Log(f"Creating device '{loadpoint_name} Charging Power'.")
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Power", Type=243, Subtype=29, 
-                           Used=1, Description=f"loadpoint_{loadpoint_id}_charging_power", 
+                           Used=0, Description=f"loadpoint_{loadpoint_id}_charging_power", 
                            DeviceID=external_id).Create()
         
         # Charged energy
@@ -325,7 +325,7 @@ class DeviceManager:
         if unit not in Devices:
             Domoticz.Log(f"Creating device '{loadpoint_name} Charged Energy'.")
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charged Energy", Type=243, Subtype=33, 
-                           Used=1, Description=f"loadpoint_{loadpoint_id}_charged_energy", 
+                           Used=0, Description=f"loadpoint_{loadpoint_id}_charged_energy", 
                            DeviceID=external_id).Create()
             
         # Charging mode
@@ -338,7 +338,7 @@ class DeviceManager:
                       "LevelOffHidden": "false",
                       "SelectorStyle": "0"}
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Mode", Type=244, Subtype=62, 
-                           Switchtype=18, Image=9, Options=Options, Used=1, 
+                           Switchtype=18, Image=9, Options=Options, Used=0, 
                            Description=f"loadpoint_{loadpoint_id}_mode", 
                            DeviceID=external_id).Create()
             
@@ -352,7 +352,7 @@ class DeviceManager:
                       "LevelOffHidden": "false",
                       "SelectorStyle": "0"}
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Phases", Type=244, Subtype=62, 
-                           Switchtype=18, Image=9, Options=Options, Used=1, 
+                           Switchtype=18, Image=9, Options=Options, Used=0, 
                            Description=f"loadpoint_{loadpoint_id}_phases", 
                            DeviceID=external_id).Create()
             
@@ -363,7 +363,7 @@ class DeviceManager:
             if unit not in Devices:
                 Domoticz.Log(f"Creating device '{loadpoint_name} Min SoC'.")
                 Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Min SoC", Type=243, Subtype=6, 
-                               Used=1, Description=f"loadpoint_{loadpoint_id}_min_soc", 
+                               Used=0, Description=f"loadpoint_{loadpoint_id}_min_soc", 
                                DeviceID=external_id).Create()
             
         # Target SoC if applicable
@@ -373,7 +373,7 @@ class DeviceManager:
             if unit not in Devices:
                 Domoticz.Log(f"Creating device '{loadpoint_name} Target SoC'.")
                 Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Target SoC", Type=243, Subtype=6, 
-                               Used=1, Description=f"loadpoint_{loadpoint_id}_target_soc", 
+                               Used=0, Description=f"loadpoint_{loadpoint_id}_target_soc", 
                                DeviceID=external_id).Create()
         
         # Charging timer
@@ -382,7 +382,7 @@ class DeviceManager:
         if unit not in Devices:
             Domoticz.Log(f"Creating device '{loadpoint_name} Charging Timer'.")
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Timer", Type=243, Subtype=8, 
-                           Used=1, Description=f"loadpoint_{loadpoint_id}_charging_timer", 
+                           Used=0, Description=f"loadpoint_{loadpoint_id}_charging_timer", 
                            DeviceID=external_id).Create()
     
     def update_site_devices(self, site_data, Devices):
