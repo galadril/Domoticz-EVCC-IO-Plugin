@@ -134,8 +134,13 @@ class EVCCApi:
                     data = json.loads(message)
                     current_time = time.time()
                     
-                    # Log the received data
-                    Domoticz.Debug(f"WebSocket received data: {json.dumps(data, indent=2)}")
+                    # Log the received data with proper formatting and line breaks
+                    log_message = f"\nWebSocket received data:\n{json.dumps(data, indent=2, ensure_ascii=False)}\n"
+                    # Split long messages into chunks to avoid truncation
+                    chunk_size = 1000
+                    for i in range(0, len(log_message), chunk_size):
+                        chunk = log_message[i:i + chunk_size]
+                        Domoticz.Debug(chunk)
                     
                     # Determine if this is a complete state update
                     # Complete updates typically include multiple key indicators
@@ -151,7 +156,12 @@ class EVCCApi:
                             self.ws_last_data = data.copy()  # Store complete state
                             self.ws_temp_data = {}  # Clear temporary data
                             self.received_complete_state = True
-                            Domoticz.Debug("Complete WebSocket state update received")
+                            
+                            # Log complete state update with proper formatting
+                            log_message = f"\nComplete WebSocket state update received:\n{json.dumps(self.ws_last_data, indent=2, ensure_ascii=False)}\n"
+                            for i in range(0, len(log_message), chunk_size):
+                                chunk = log_message[i:i + chunk_size]
+                                Domoticz.Debug(chunk)
                             
                             # Handle one-time connection mode
                             if not self.ws_keep_connection:
@@ -172,10 +182,14 @@ class EVCCApi:
                                 
                                 if (current_time - self.ws_last_log_time) > self.ws_log_interval:
                                     self.ws_last_log_time = current_time
-                                    Domoticz.Debug(f"Merged partial WebSocket updates with last complete state: {json.dumps(merged_data, indent=2)}")
+                                    # Log merged updates with proper formatting
+                                    log_message = f"\nMerged partial WebSocket updates:\n{json.dumps(merged_data, indent=2, ensure_ascii=False)}\n"
+                                    for i in range(0, len(log_message), chunk_size):
+                                        chunk = log_message[i:i + chunk_size]
+                                        Domoticz.Debug(chunk)
                     
                 except Exception as e:
-                    Domoticz.Error(f"Error parsing WebSocket data: {str(e)}")
+                    Domoticz.Error(f"Error parsing WebSocket data: {str(e)}\nRaw message: {message}")
             
             def on_error(ws, error):
                 self.ws_error = str(error)
