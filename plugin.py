@@ -136,18 +136,39 @@ class BasePlugin:
                 
             # Create loadpoint devices
             if "loadpoints" in state:
-                for i, loadpoint in enumerate(state["loadpoints"]):
-                    loadpoint_id = i + 1
-                    self.loadpoints[loadpoint_id] = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
-                    self._createLoadpointDevices(loadpoint_id, loadpoint)
+                loadpoints = state["loadpoints"]
+                if isinstance(loadpoints, list):
+                    for i, loadpoint in enumerate(loadpoints):
+                        loadpoint_id = i + 1
+                        if isinstance(loadpoint, dict):
+                            self.loadpoints[loadpoint_id] = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
+                            self._createLoadpointDevices(loadpoint_id, loadpoint)
+                elif isinstance(loadpoints, dict):
+                    for loadpoint_id_str, loadpoint in loadpoints.items():
+                        loadpoint_id = len(self.loadpoints) + 1
+                        if isinstance(loadpoint, dict):
+                            self.loadpoints[loadpoint_id] = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
+                            self._createLoadpointDevices(loadpoint_id, loadpoint)
             
             # Create vehicle devices
             if "vehicles" in state:
-                for i, vehicle in enumerate(state["vehicles"]):
-                    vehicle_id = i + 1
-                    vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {vehicle_id}"))
-                    self.vehicles[vehicle_id] = vehicle_name
-                    self._createVehicleDevices(vehicle_id, vehicle)
+                vehicles = state["vehicles"]
+                if isinstance(vehicles, list):
+                    for i, vehicle in enumerate(vehicles):
+                        vehicle_id = i + 1
+                        if isinstance(vehicle, dict):
+                            vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {vehicle_id}"))
+                            self.vehicles[vehicle_id] = vehicle_name
+                            self._createVehicleDevices(vehicle_id, vehicle)
+                elif isinstance(vehicles, dict):
+                    vehicle_index = 1
+                    for vehicle_id_str, vehicle in vehicles.items():
+                        if isinstance(vehicle, dict):
+                            vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {vehicle_index}"))
+                            self.vehicles[vehicle_index] = vehicle_name
+                            vehicle["original_id"] = vehicle_id_str
+                            self._createVehicleDevices(vehicle_index, vehicle)
+                            vehicle_index += 1
             
         except Exception as e:
             Domoticz.Error(f"Error getting initial state: {str(e)}")
@@ -400,29 +421,66 @@ class BasePlugin:
             
             # Update vehicle information
             if "vehicles" in state:
-                for i, vehicle in enumerate(state["vehicles"]):
-                    vehicle_id = i + 1
-                    
-                    # Check if it's a new vehicle not seen before
-                    if vehicle_id not in self.vehicles:
-                        vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {vehicle_id}"))
-                        self.vehicles[vehicle_id] = vehicle_name
-                        self._createVehicleDevices(vehicle_id, vehicle)
-                    
-                    self._updateVehicleDevices(vehicle_id, vehicle)
+                vehicles = state["vehicles"]
+                if isinstance(vehicles, list):
+                    for i, vehicle in enumerate(vehicles):
+                        vehicle_id = i + 1
+                        if isinstance(vehicle, dict):
+                            if vehicle_id not in self.vehicles:
+                                vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {vehicle_id}"))
+                                self.vehicles[vehicle_id] = vehicle_name
+                                self._createVehicleDevices(vehicle_id, vehicle)
+                            self._updateVehicleDevices(vehicle_id, vehicle)
+                elif isinstance(vehicles, dict):
+                    for vehicle_id_str, vehicle in vehicles.items():
+                        our_vehicle_id = None
+                        for idx, v_info in self.vehicles.items():
+                            if isinstance(v_info, dict) and v_info.get("original_id") == vehicle_id_str:
+                                our_vehicle_id = idx
+                                break
+                        if our_vehicle_id is None:
+                            our_vehicle_id = len(self.vehicles) + 1
+                            if isinstance(vehicle, dict):
+                                vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {our_vehicle_id}"))
+                                self.vehicles[our_vehicle_id] = {
+                                    "name": vehicle_name,
+                                    "original_id": vehicle_id_str
+                                }
+                                vehicle["original_id"] = vehicle_id_str
+                                self._createVehicleDevices(our_vehicle_id, vehicle)
+                        if isinstance(vehicle, dict):
+                            self._updateVehicleDevices(our_vehicle_id, vehicle)
             
             # Update loadpoint information
             if "loadpoints" in state:
-                for i, loadpoint in enumerate(state["loadpoints"]):
-                    loadpoint_id = i + 1
-                    
-                    # Check if it's a new loadpoint not seen before
-                    if loadpoint_id not in self.loadpoints:
-                        loadpoint_name = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
-                        self.loadpoints[loadpoint_id] = loadpoint_name
-                        self._createLoadpointDevices(loadpoint_id, loadpoint)
-                    
-                    self._updateLoadpointDevices(loadpoint_id, loadpoint)
+                loadpoints = state["loadpoints"]
+                if isinstance(loadpoints, list):
+                    for i, loadpoint in enumerate(loadpoints):
+                        loadpoint_id = i + 1
+                        if isinstance(loadpoint, dict):
+                            if loadpoint_id not in self.loadpoints:
+                                loadpoint_name = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
+                                self.loadpoints[loadpoint_id] = loadpoint_name
+                                self._createLoadpointDevices(loadpoint_id, loadpoint)
+                            self._updateLoadpointDevices(loadpoint_id, loadpoint)
+                elif isinstance(loadpoints, dict):
+                    for loadpoint_id_str, loadpoint in loadpoints.items():
+                        our_loadpoint_id = None
+                        for idx, lp_name in self.loadpoints.items():
+                            if lp_name.get("original_id", "") == loadpoint_id_str:
+                                our_loadpoint_id = idx
+                                break
+                        if our_loadpoint_id is None:
+                            our_loadpoint_id = len(self.loadpoints) + 1
+                            if isinstance(loadpoint, dict):
+                                loadpoint_name = loadpoint.get("title", f"Loadpoint {our_loadpoint_id}")
+                                self.loadpoints[our_loadpoint_id] = {
+                                    "name": loadpoint_name,
+                                    "original_id": loadpoint_id_str
+                                }
+                                self._createLoadpointDevices(our_loadpoint_id, loadpoint)
+                        if isinstance(loadpoint, dict):
+                            self._updateLoadpointDevices(our_loadpoint_id, loadpoint)
                     
         except Exception as e:
             Domoticz.Error(f"Error updating devices: {str(e)}")
@@ -551,24 +609,19 @@ class BasePlugin:
         unit = self._getDeviceUnit("loadpoint", loadpoint_id, "charging_timer")
         if unit is not None:
             if "charging" in loadpoint_data and loadpoint_data["charging"]:
-                # If charging, update the charging timer
                 if "chargeTimer" in loadpoint_data:
                     charge_timer = loadpoint_data["chargeTimer"]
-                    # Convert seconds to minutes for the timer device
                     minutes = int(charge_timer / 60)
                     self._updateDeviceValue(unit, 0, minutes)
             else:
-                # Not charging, set timer to 0
                 self._updateDeviceValue(unit, 0, 0)
 
     def _updateDeviceValue(self, unit, n_value, s_value):
         """Helper method to update device values"""
-        # Make sure device exists
         if unit not in Devices:
             Domoticz.Error(f"Device unit {unit} does not exist")
             return
             
-        # Update the device
         try:
             if isinstance(s_value, (int, float)):
                 s_value = str(s_value)
@@ -583,7 +636,6 @@ class BasePlugin:
         """Handle commands sent to devices"""
         Domoticz.Debug(f"onCommand called for Unit: {Unit} Command: {Command} Level: {Level}")
         
-        # Find device type from unit mapping
         if Unit not in self.unitDeviceMapping:
             Domoticz.Error(f"Unknown device unit: {Unit}")
             return
@@ -598,9 +650,7 @@ class BasePlugin:
         parameter = device_info[2]
         
         try:
-            # Handle loadpoint devices
             if device_type == "loadpoint":
-                # Handle charging mode changes
                 if parameter == "mode":
                     mode = "off"
                     if Level == 10: mode = "now" 
@@ -614,7 +664,6 @@ class BasePlugin:
                     else:
                         Domoticz.Error(f"Failed to change charging mode: {response.status_code}")
                 
-                # Handle phases changes
                 elif parameter == "phases":
                     phases = 0
                     if Level == 0: phases = 0  # auto
@@ -628,9 +677,7 @@ class BasePlugin:
                     else:
                         Domoticz.Error(f"Failed to change charging phases: {response.status_code}")
                 
-                # Handle min SoC changes
                 elif parameter == "min_soc":
-                    # Level contains the SoC value
                     response = requests.post(f"{self.evccUrl}/loadpoints/{device_id}/minsoc/{Level}")
                     if response.status_code == 200:
                         Domoticz.Log(f"Successfully changed min SoC to {Level} for loadpoint {device_id}")
@@ -638,9 +685,7 @@ class BasePlugin:
                     else:
                         Domoticz.Error(f"Failed to change min SoC: {response.status_code}")
                 
-                # Handle target SoC changes
                 elif parameter == "target_soc":
-                    # Level contains the SoC value
                     response = requests.post(f"{self.evccUrl}/loadpoints/{device_id}/limitsoc/{Level}")
                     if response.status_code == 200:
                         Domoticz.Log(f"Successfully changed target SoC to {Level} for loadpoint {device_id}")
@@ -648,7 +693,6 @@ class BasePlugin:
                     else:
                         Domoticz.Error(f"Failed to change target SoC: {response.status_code}")
             
-            # Handle battery mode changes
             elif device_type == "battery" and parameter == "mode":
                 mode = "normal"
                 if Level == 0: mode = "unknown"
@@ -663,11 +707,20 @@ class BasePlugin:
                 else:
                     Domoticz.Error(f"Failed to change battery mode: {response.status_code}")
                     
-            # Handle vehicle specific commands
             elif device_type == "vehicle":
-                # Could implement vehicle-specific commands here
-                # such as setting min/max SoC for a specific vehicle
-                Domoticz.Log(f"Command for vehicle {device_id} parameter {parameter} not implemented yet")
+                vehicle_info = self.vehicles.get(int(device_id), None)
+                original_id = None
+                
+                if vehicle_info:
+                    if isinstance(vehicle_info, dict):
+                        original_id = vehicle_info.get("original_id", None)
+                    else:
+                        original_id = f"vehicle_{device_id}"
+                
+                if original_id:
+                    Domoticz.Log(f"Command for vehicle {original_id} parameter {parameter} not implemented yet")
+                else:
+                    Domoticz.Error(f"Cannot find original ID for vehicle {device_id}")
                 
         except Exception as e:
             Domoticz.Error(f"Error handling command: {str(e)}")
