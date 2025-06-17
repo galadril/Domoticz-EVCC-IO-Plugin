@@ -8,6 +8,14 @@ Author: Mark Heinis
 import Domoticz
 import requests
 import json
+import threading
+import time
+
+try:
+    import websocket
+except ImportError:
+    Domoticz.Error("Websocket-client module not found. Please install it.")
+    websocket = None
 
 class EVCCApi:
     """Class for handling EVCC API communications"""
@@ -15,8 +23,15 @@ class EVCCApi:
     def __init__(self, address, port, password=None):
         """Initialize API client with connection settings"""
         self.base_url = f"http://{address}:{port}/api"
+        self.ws_url = f"ws://{address}:{port}/ws"
         self.password = password
         self.auth_cookie = None
+        self.ws = None
+        self.ws_connected = False
+        self.ws_last_data = None
+        self.ws_error = None
+        self.ws_reconnect_interval = 60  # Reconnect every 60 seconds if connection lost
+        self.ws_thread = None
         
     def login(self):
         """Login to EVCC API if password is provided"""
@@ -50,6 +65,9 @@ class EVCCApi:
             
     def logout(self):
         """Logout from EVCC API"""
+        # Close WebSocket connection if it exists
+        self.close_websocket()
+        
         if self.auth_cookie is not None:
             try:
                 requests.post(f"{self.base_url}/auth/logout")
@@ -65,10 +83,108 @@ class EVCCApi:
         if self.auth_cookie:
             return {"auth": self.auth_cookie.value}
         return {}
-        
+    
+    def connect_websocket(self):
+        """Connect to EVCC WebSocket for real-time data"""
+        if not websocket:
+            Domoticz.Error("Websocket module not available")
+            return False
+            
+        if self.ws_connected:
+            return True
+            
+        try:
+            # Create WebSocket connection
+            headers = {}
+            cookies = self.get_cookies()
+            if cookies:
+                cookie_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
+                headers["Cookie"] = cookie_str
+            
+            # Define WebSocket callbacks
+            def on_message(ws, message):
+                try:
+                    self.ws_last_data = json.loads(message)
+                    Domoticz.Debug("WebSocket data received")
+                except Exception as e:
+                    Domoticz.Error(f"Error parsing WebSocket data: {str(e)}")
+            
+            def on_error(ws, error):
+                self.ws_error = str(error)
+                Domoticz.Error(f"WebSocket error: {self.ws_error}")
+                
+            def on_close(ws, close_status_code, close_msg):
+                self.ws_connected = False
+                Domoticz.Log("WebSocket connection closed")
+                
+            def on_open(ws):
+                self.ws_connected = True
+                self.ws_error = None
+                Domoticz.Log("WebSocket connection established")
+            
+            # Create WebSocket instance
+            self.ws = websocket.WebSocketApp(
+                self.ws_url,
+                header=headers,
+                on_open=on_open,
+                on_message=on_message,
+                on_error=on_error,
+                on_close=on_close
+            )
+            
+            # Start WebSocket in a separate thread
+            def run_websocket():
+                while True:
+                    try:
+                        self.ws.run_forever()
+                        Domoticz.Log("WebSocket connection lost, reconnecting...")
+                        time.sleep(5)  # Wait before reconnecting
+                    except Exception as e:
+                        Domoticz.Error(f"WebSocket thread error: {str(e)}")
+                        time.sleep(self.ws_reconnect_interval)
+            
+            self.ws_thread = threading.Thread(target=run_websocket)
+            self.ws_thread.daemon = True
+            self.ws_thread.start()
+            
+            # Wait for connection to establish
+            timeout = 10
+            start_time = time.time()
+            while not self.ws_connected and (time.time() - start_time) < timeout:
+                time.sleep(0.1)
+            
+            return self.ws_connected
+            
+        except Exception as e:
+            Domoticz.Error(f"Error connecting to WebSocket: {str(e)}")
+            return False
+    
+    def close_websocket(self):
+        """Close WebSocket connection"""
+        if self.ws:
+            try:
+                self.ws.close()
+                self.ws_connected = False
+                Domoticz.Log("WebSocket connection closed")
+            except Exception as e:
+                Domoticz.Error(f"Error closing WebSocket: {str(e)}")
+    
     def get_state(self):
         """Get the current state of the EVCC system"""
+        # First try to get data from WebSocket if connected
+        if self.ws_connected and self.ws_last_data:
+            return self.ws_last_data
+        
+        # If WebSocket not available, fall back to REST API
         try:
+            # First try to connect WebSocket if not already connected
+            if not self.ws_connected and websocket:
+                self.connect_websocket()
+                # If connection successful and data available, return it
+                if self.ws_connected and self.ws_last_data:
+                    return self.ws_last_data
+            
+            # Otherwise use regular API
             cookies = self.get_cookies()
             
             response = requests.get(f"{self.base_url}/state", cookies=cookies)
