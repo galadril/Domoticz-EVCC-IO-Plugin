@@ -90,6 +90,12 @@ class BasePlugin:
 
     def _initialize_websocket(self):
         """Initialize WebSocket connection"""
+        # First ensure any existing connection is properly closed
+        if self.api.ws_connected:
+            self.api.close_websocket()
+            # Small delay to ensure socket is fully closed
+            time.sleep(0.5)
+            
         ws_connected = self.api.connect_websocket(keep_connection=True)
         if not ws_connected:
             if self.ws_retry_count < self.max_ws_retries:
@@ -104,6 +110,7 @@ class BasePlugin:
         Domoticz.Log("WebSocket connected successfully. Will receive real-time updates.")
         self.ws_initialized = True
         self.ws_retry_count = 0  # Reset retry count on successful connection
+        self.last_ws_reconnect = time.time()  # Update the last reconnect time
         return True
 
     def onHeartbeat(self):
@@ -114,10 +121,8 @@ class BasePlugin:
             # Force reconnect every 60 seconds
             if (current_time - self.last_ws_reconnect >= self.ws_reconnect_interval):
                 Domoticz.Log("Forcing WebSocket reconnection after 60 seconds")
-                self.api.close_websocket()  # Close existing connection
-                self.ws_initialized = False
-                self.last_ws_reconnect = current_time
-                self.ws_retry_count = 0  # Reset retry count for fresh connection attempt
+                self._initialize_websocket()  # This will handle closing and reconnecting
+                return  # Skip this heartbeat cycle to allow connection to establish
             
             # Check WebSocket connection and try to reconnect if needed
             if not self.api.ws_connected:
