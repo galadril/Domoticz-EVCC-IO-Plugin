@@ -37,7 +37,11 @@ def update_device_value(unit, n_value, s_value, Devices=None):
         
         # Convert to string if numeric
         if isinstance(s_value, (int, float)):
-            if device.Type == 243:  # Custom sensor type
+            if device.Type == 113:  # Custom Counter
+                # For custom counter, we need to set both nValue and sValue to the actual value
+                n_value = int(s_value * 1000)  # Store value * 1000 in nValue for precision
+                s_value = f"{float(s_value):.3f}"  # Format with 3 decimal places
+            elif device.Type == 243:  # Custom sensor type
                 if device.SubType == 29:  # Power device (W)
                     # Power value should be formatted as: "current_power;today_energy"
                     # Since we don't track energy over time, use 0 for today's energy
