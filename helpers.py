@@ -33,11 +33,26 @@ def update_device_value(unit, n_value, s_value, Devices=None):
         return
         
     try:
+        device = devices_to_use[unit]
+        
+        # Convert to string if numeric
         if isinstance(s_value, (int, float)):
-            s_value = str(s_value)
+            # Format kWh devices properly
+            if device.Type == 243:  # Custom sensor type
+                if device.SubType == 29:  # Power device (W)
+                    # Power value should be formatted as "power_value;energy_value"
+                    # In this case, we don't have cumulative energy value, so use 0
+                    s_value = f"{s_value};0"
+                elif device.SubType == 33:  # Energy meter (kWh)
+                    # Energy meters show both power and total energy
+                    # First value is power, second is total energy
+                    if isinstance(s_value, (int, float)):
+                        s_value = f"0;{float(s_value):.3f}"
+            else:
+                s_value = str(s_value)
             
         Domoticz.Debug(f"Updating device {unit} - n_value: {n_value}, s_value: {s_value}")
-        devices_to_use[unit].Update(nValue=n_value, sValue=s_value, TimedOut=0)
+        device.Update(nValue=n_value, sValue=s_value, TimedOut=0)
         
     except Exception as e:
         Domoticz.Error(f"Error updating device {unit}: {str(e)}")
