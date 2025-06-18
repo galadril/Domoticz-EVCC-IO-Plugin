@@ -10,7 +10,7 @@ import re
 
 def extract_device_info_from_description(description):
     """Extract device type, id, and parameter from device description"""
-    match = re.search(r'^([a-z]+)_(\d+)_([a-z_]+)$', description)
+    match = re.search(r'^([a-z]+)_([a-zA-Z0-9:]+)_([a-z_]+)$', description)
     if match:
         return {
             'device_type': match.group(1),
@@ -53,6 +53,10 @@ def update_device_value(unit, n_value, s_value, Devices=None):
                     s_value = f"{float(s_value):.1f}"
                 elif device.SubType == 8:  # Counter
                     s_value = f"{float(s_value):.0f}"
+                elif device.SubType == 23:  # Current (A)
+                    s_value = f"{float(s_value):.3f}"
+                elif device.SubType == 1:   # Currency
+                    s_value = f"{float(s_value):.3f}"
                 else:
                     s_value = str(s_value)
             else:
@@ -76,8 +80,9 @@ def update_device_value(unit, n_value, s_value, Devices=None):
 def get_device_unit(device_mapping, unit_device_mapping, device_type, device_id, parameter, create_new=False, Devices=None):
     """Get or create a device unit number for the specified device"""
     # Import here to avoid circular imports
-    from constants import (UNIT_BASE_SITE, UNIT_BASE_BATTERY, 
-                          UNIT_BASE_VEHICLE, UNIT_BASE_LOADPOINT)
+    from constants import (UNIT_BASE_SITE, UNIT_BASE_BATTERY, UNIT_BASE_PV,
+                          UNIT_BASE_TARIFF, UNIT_BASE_GRID, UNIT_BASE_VEHICLE,
+                          UNIT_BASE_LOADPOINT, UNIT_BASE_SESSION)
     
     key = f"{device_type}_{device_id}_{parameter}"
     
@@ -94,11 +99,19 @@ def get_device_unit(device_mapping, unit_device_mapping, device_type, device_id,
     if device_type == "site":
         base_unit = UNIT_BASE_SITE
     elif device_type == "battery":
-        base_unit = UNIT_BASE_BATTERY
+        base_unit = UNIT_BASE_BATTERY + (int(device_id) if device_id.isdigit() else 0) * 10
+    elif device_type == "pv":
+        base_unit = UNIT_BASE_PV + (int(device_id) if device_id.isdigit() else 0) * 10
+    elif device_type == "tariff":
+        base_unit = UNIT_BASE_TARIFF
+    elif device_type == "grid":
+        base_unit = UNIT_BASE_GRID
     elif device_type == "vehicle":
-        base_unit = UNIT_BASE_VEHICLE + (int(device_id) - 1) * 20
+        base_unit = UNIT_BASE_VEHICLE + (int(device_id.split(':')[1]) if ':' in device_id else int(device_id)) * 20
     elif device_type == "loadpoint":
-        base_unit = UNIT_BASE_LOADPOINT + (int(device_id) - 1) * 20
+        base_unit = UNIT_BASE_LOADPOINT + (int(device_id) if device_id.isdigit() else 0) * 20
+    elif device_type == "session":
+        base_unit = UNIT_BASE_SESSION + (int(device_id) if device_id.isdigit() else 0) * 10
     
     # Find the next available unit number
     unit = base_unit
@@ -117,3 +130,9 @@ def get_device_unit(device_mapping, unit_device_mapping, device_type, device_id,
     
     Domoticz.Debug(f"Created new device unit mapping: {key} -> Unit {unit}")
     return unit
+
+def format_device_name(device_type, title, parameter):
+    """Format device name based on type, title and parameter"""
+    if title:
+        return f"{title} {parameter.replace('_', ' ').title()}"
+    return f"{device_type.title()} {parameter.replace('_', ' ').title()}"

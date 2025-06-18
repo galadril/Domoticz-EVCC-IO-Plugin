@@ -6,18 +6,18 @@ Author: Mark Heinis
 """
 
 import Domoticz
-from helpers import get_device_unit, update_device_value
+from helpers import get_device_unit, update_device_value, format_device_name
 import re
 
 class DeviceManager:
     """Class for handling device creation and updates"""
     
     def __init__(self):
-        # Track created Domoticz.Devices with mapping: {type}_{id} -> unit
+        # Track created Domoticz.Devices with mapping: {type}_{id}_{parameter} -> unit
         # Example: "vehicle_1_soc" -> unit number
         self.device_unit_mapping = {}
         
-        # Reverse mapping: unit -> {type}_{id}
+        # Reverse mapping: unit -> {type}_{id}_{parameter}
         self.unit_device_mapping = {}
         
         # Track EVCC API objects by ID
@@ -25,10 +25,13 @@ class DeviceManager:
         self.vehicles = {}
         self.battery_present = False
         self.pv_systems = {}
+        self.grid_details = {}
+        self.tariffs = {}
+        self.session_stats = {}
         
         # Load existing device mappings will be done in onStart
         # after Devices are available
-        
+
     def _load_device_mapping(self, Devices):
         """Load device mapping from existing device descriptions"""
         self.device_unit_mapping = {}
@@ -38,7 +41,7 @@ class DeviceManager:
             device = Devices[unit]
             # Try to extract mappings from device description if it follows our convention
             # Format: {type}_{id}_{parameter}
-            match = re.search(r'^([a-z]+)_(\d+)_([a-z_]+)$', device.Description)
+            match = re.search(r'^([a-z]+)_([a-zA-Z0-9:]+)_([a-z_]+)$', device.Description)
             if match:
                 device_type = match.group(1)
                 device_id = match.group(2)
@@ -51,62 +54,48 @@ class DeviceManager:
                 
                 # Store vehicle info from Name and DeviceID if available
                 if device_type == "vehicle":
-                    int_id = int(device_id)
-                    # Extract the vehicle name from device name (remove the parameter part)
-                    if parameter == "soc" and " SoC" in device.Name:
-                        vehicle_name = device.Name.replace(" SoC", "")
-                        if int_id not in self.vehicles or isinstance(self.vehicles[int_id], dict):
-                            self.vehicles[int_id] = vehicle_name
-                    elif parameter == "status" and " Status" in device.Name:
-                        vehicle_name = device.Name.replace(" Status", "")
-                        if int_id not in self.vehicles or isinstance(self.vehicles[int_id], dict):
-                            self.vehicles[int_id] = vehicle_name
-                    elif parameter == "range" and " Range" in device.Name:
-                        vehicle_name = device.Name.replace(" Range", "")
-                        if int_id not in self.vehicles or isinstance(self.vehicles[int_id], dict):
+                    if ":" in device_id:  # WebSocket format
+                        vehicle_name = device.Name.split(" ")[0]  # Get name before parameter
+                        self.vehicles[device_id] = vehicle_name
+                    else:  # REST API format
+                        int_id = int(device_id)
+                        vehicle_name = device.Name.split(" ")[0]  # Get name before parameter
+                        if int_id not in self.vehicles:
                             self.vehicles[int_id] = vehicle_name
                 
-                # Store loadpoint info from Name and DeviceID if available
-                if device_type == "loadpoint":
+                # Store loadpoint info
+                elif device_type == "loadpoint":
                     int_id = int(device_id)
-                    # Extract the loadpoint name from device name (remove the parameter part)
-                    if " Charging Power" in device.Name:
-                        loadpoint_name = device.Name.replace(" Charging Power", "")
-                        if int_id not in self.loadpoints or isinstance(self.loadpoints[int_id], dict):
-                            self.loadpoints[int_id] = loadpoint_name
-                    elif " Charging Mode" in device.Name:
-                        loadpoint_name = device.Name.replace(" Charging Mode", "")
-                        if int_id not in self.loadpoints or isinstance(self.loadpoints[int_id], dict):
-                            self.loadpoints[int_id] = loadpoint_name
-                    elif " Charging Phases" in device.Name:
-                        loadpoint_name = device.Name.replace(" Charging Phases", "")
-                        if int_id not in self.loadpoints or isinstance(self.loadpoints[int_id], dict):
-                            self.loadpoints[int_id] = loadpoint_name
-                    elif " Min SoC" in device.Name:
-                        loadpoint_name = device.Name.replace(" Min SoC", "")
-                        if int_id not in self.loadpoints or isinstance(self.loadpoints[int_id], dict):
-                            self.loadpoints[int_id] = loadpoint_name
-                    elif " Target SoC" in device.Name:
-                        loadpoint_name = device.Name.replace(" Target SoC", "")
-                        if int_id not in self.loadpoints or isinstance(self.loadpoints[int_id], dict):
-                            self.loadpoints[int_id] = loadpoint_name
-                    elif " Charging Timer" in device.Name:
-                        loadpoint_name = device.Name.replace(" Charging Timer", "")
-                        if int_id not in self.loadpoints or isinstance(self.loadpoints[int_id], dict):
-                            self.loadpoints[int_id] = loadpoint_name
-                    elif " Charged Energy" in device.Name:
-                        loadpoint_name = device.Name.replace(" Charged Energy", "")
-                        if int_id not in self.loadpoints or isinstance(self.loadpoints[int_id], dict):
-                            self.loadpoints[int_id] = loadpoint_name
-                            
-                # Track if we have battery devices
-                if device_type == "battery":
+                    loadpoint_name = device.Name.split(" ")[0]  # Get name before parameter
+                    if int_id not in self.loadpoints:
+                        self.loadpoints[int_id] = loadpoint_name
+                
+                # Track battery presence
+                elif device_type == "battery":
                     self.battery_present = True
+                    
+                # Track grid details
+                elif device_type == "grid":
+                    if device_id not in self.grid_details:
+                        self.grid_details[device_id] = {}
+                    self.grid_details[device_id][parameter] = unit
+                
+                # Track tariffs
+                elif device_type == "tariff":
+                    if device_id not in self.tariffs:
+                        self.tariffs[device_id] = {}
+                    self.tariffs[device_id][parameter] = unit
+                
+                # Track session stats
+                elif device_type == "session":
+                    if device_id not in self.session_stats:
+                        self.session_stats[device_id] = {}
+                    self.session_stats[device_id][parameter] = unit
                 
                 Domoticz.Debug(f"Loaded device mapping: {key} -> Unit {unit}")
                 if device.DeviceID:
                     Domoticz.Debug(f"  with external ID: {device.DeviceID}")
-        
+
     def create_site_devices(self, site_data, Devices):
         """Create the site Domoticz.Devices based on available data"""
         # Grid power
@@ -155,6 +144,68 @@ class DeviceManager:
         elif "battery" in site_data and isinstance(site_data["battery"], list):
             self.battery_present = True
             self.create_battery_devices_from_array(site_data, Devices)
+        
+        # Create tariff devices
+        if "tariffGrid" in site_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "tariff", 1, "grid", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;EUR/kWh'}
+                Domoticz.Device(Unit=unit, Name="Grid Tariff", Type=243, Subtype=1,
+                              Options=options, Used=0, Description="tariff_1_grid").Create()
+
+        if "tariffPriceHome" in site_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "tariff", 1, "home", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;EUR/kWh'}
+                Domoticz.Device(Unit=unit, Name="Home Tariff", Type=243, Subtype=1,
+                              Options=options, Used=0, Description="tariff_1_home").Create()
+
+        if "tariffPriceLoadpoints" in site_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "tariff", 1, "loadpoints", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;EUR/kWh'}
+                Domoticz.Device(Unit=unit, Name="Loadpoints Tariff", Type=243, Subtype=1,
+                              Options=options, Used=0, Description="tariff_1_loadpoints").Create()
+
+        # Create grid current devices
+        if "grid" in site_data and isinstance(site_data["grid"], dict) and "currents" in site_data["grid"]:
+            currents = site_data["grid"]["currents"]
+            for phase in range(len(currents)):
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                     "grid", 1, f"current_l{phase+1}", True, Devices)
+                if unit not in Devices:
+                    options = {'Custom': '1;A'}
+                    Domoticz.Device(Unit=unit, Name=f"Grid Current L{phase+1}", Type=243, Subtype=23,
+                                  Options=options, Used=0, Description=f"grid_1_current_l{phase+1}").Create()
+
+        # Create grid energy device
+        if "grid" in site_data and isinstance(site_data["grid"], dict) and "energy" in site_data["grid"]:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "grid", 1, "energy", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;kWh'}
+                Domoticz.Device(Unit=unit, Name="Grid Energy", Type=243, Subtype=33,
+                              Options=options, Used=0, Description="grid_1_energy").Create()
+
+        # Create green share devices
+        if "greenShareHome" in site_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "site", 1, "green_share_home", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;%'}
+                Domoticz.Device(Unit=unit, Name="Home Green Share", Type=243, Subtype=6,
+                              Options=options, Used=0, Description="site_1_green_share_home").Create()
+
+        if "greenShareLoadpoints" in site_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "site", 1, "green_share_loadpoints", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;%'}
+                Domoticz.Device(Unit=unit, Name="Loadpoints Green Share", Type=243, Subtype=6,
+                              Options=options, Used=0, Description="site_1_green_share_loadpoints").Create()
     
     def create_pv_devices(self, site_data, Devices):
         """Create PV system devices"""
@@ -397,6 +448,39 @@ class DeviceManager:
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Timer", Type=243, Subtype=8, 
                            Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_charging_timer", 
                            DeviceID=external_id).Create()
+        
+        # Create session statistics devices
+        if "sessionEnergy" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "loadpoint", loadpoint_id, "session_energy", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;kWh'}
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Energy", Type=243, Subtype=33,
+                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_session_energy").Create()
+
+        if "sessionPrice" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "loadpoint", loadpoint_id, "session_price", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;EUR'}
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Price", Type=243, Subtype=1,
+                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_session_price").Create()
+
+        if "sessionPricePerKWh" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "loadpoint", loadpoint_id, "session_price_per_kwh", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;EUR/kWh'}
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Price per kWh", Type=243, Subtype=1,
+                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_session_price_per_kwh").Create()
+
+        if "sessionSolarPercentage" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "loadpoint", loadpoint_id, "session_solar_percentage", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;%'}
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Solar Percentage", Type=243, Subtype=6,
+                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_session_solar_percentage").Create()
     
     def update_site_devices(self, site_data, Devices):
         """Update site Domoticz.Devices"""
@@ -429,6 +513,54 @@ class DeviceManager:
         # Update PV system devices if available
         if "pv" in site_data and isinstance(site_data["pv"], list) and len(site_data["pv"]) > 0:
             self.update_pv_devices(site_data, Devices)
+        
+        # Update tariff devices
+        if "tariffGrid" in site_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "tariff", 1, "grid", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, site_data["tariffGrid"], Devices)
+
+        if "tariffPriceHome" in site_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "tariff", 1, "home", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, site_data["tariffPriceHome"], Devices)
+
+        if "tariffPriceLoadpoints" in site_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "tariff", 1, "loadpoints", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, site_data["tariffPriceLoadpoints"], Devices)
+
+        # Update grid current devices
+        if "grid" in site_data and isinstance(site_data["grid"], dict) and "currents" in site_data["grid"]:
+            currents = site_data["grid"]["currents"]
+            for phase in range(len(currents)):
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                     "grid", 1, f"current_l{phase+1}", False, Devices)
+                if unit is not None:
+                    update_device_value(unit, 0, currents[phase], Devices)
+
+        # Update grid energy device
+        if "grid" in site_data and isinstance(site_data["grid"], dict) and "energy" in site_data["grid"]:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "grid", 1, "energy", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, site_data["grid"]["energy"], Devices)
+
+        # Update green share devices
+        if "greenShareHome" in site_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "site", 1, "green_share_home", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, site_data["greenShareHome"] * 100, Devices)
+
+        if "greenShareLoadpoints" in site_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "site", 1, "green_share_loadpoints", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, site_data["greenShareLoadpoints"] * 100, Devices)
     
     def update_pv_devices(self, site_data, Devices):
         """Update PV system devices"""
@@ -591,6 +723,31 @@ class DeviceManager:
                     update_device_value(unit, 0, minutes, Devices)
             else:
                 update_device_value(unit, 0, 0, Devices)
+        
+        # Update session statistics devices
+        if "sessionEnergy" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "loadpoint", loadpoint_id, "session_energy", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, loadpoint_data["sessionEnergy"], Devices)
+
+        if "sessionPrice" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "loadpoint", loadpoint_id, "session_price", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, loadpoint_data["sessionPrice"], Devices)
+
+        if "sessionPricePerKWh" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "loadpoint", loadpoint_id, "session_price_per_kwh", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, loadpoint_data["sessionPricePerKWh"], Devices)
+
+        if "sessionSolarPercentage" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "loadpoint", loadpoint_id, "session_solar_percentage", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, loadpoint_data["sessionSolarPercentage"], Devices)
                 
     def get_device_info(self, unit):
         """Get device type, id and parameter from unit number"""
