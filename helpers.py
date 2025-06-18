@@ -59,8 +59,9 @@ def update_device_value(unit, n_value, s_value, Devices=None):
                     s_value = f"{float(s_value):.0f}"
                 elif device.SubType == 23:  # Current (A)
                     s_value = f"{float(s_value):.3f}"
-                elif device.SubType == 1:   # Currency
+                elif device.SubType == 1:   # Custom Counter / Tariff
                     s_value = f"{float(s_value):.3f}"
+                    n_value = int(s_value * 1000)
                 else:
                     s_value = str(s_value)
             else:
