@@ -37,22 +37,38 @@ def update_device_value(unit, n_value, s_value, Devices=None):
         
         # Convert to string if numeric
         if isinstance(s_value, (int, float)):
-            # Format kWh devices properly
             if device.Type == 243:  # Custom sensor type
                 if device.SubType == 29:  # Power device (W)
-                    # Power value should be formatted as "power_value;energy_value"
-                    # In this case, we don't have cumulative energy value, so use 0
-                    s_value = f"{s_value};0"
+                    # Power value should be formatted as: "current_power;today_energy"
+                    # Since we don't track energy over time, use 0 for today's energy
+                    s_value = f"{float(s_value):.1f};0"
                 elif device.SubType == 33:  # Energy meter (kWh)
-                    # Energy meters show both power and total energy
-                    # First value is power, second is total energy
-                    if isinstance(s_value, (int, float)):
-                        s_value = f"0;{float(s_value):.3f}"
+                    # Energy meters show both instant power and total energy
+                    # Format: "instant_power;total_energy"
+                    # For energy values, we just show 0 for power
+                    s_value = f"0;{float(s_value):.3f}"
+                elif device.SubType == 6:  # Percentage
+                    s_value = f"{float(s_value):.1f}"
+                elif device.SubType == 31:  # Distance (km)
+                    s_value = f"{float(s_value):.1f}"
+                elif device.SubType == 8:  # Counter
+                    s_value = f"{float(s_value):.0f}"
+                else:
+                    s_value = str(s_value)
             else:
                 s_value = str(s_value)
             
         Domoticz.Debug(f"Updating device {unit} - n_value: {n_value}, s_value: {s_value}")
-        device.Update(nValue=n_value, sValue=s_value, TimedOut=0)
+        
+        # Create update dict with only required parameters
+        update_dict = {
+            "nValue": int(n_value),
+            "sValue": str(s_value),
+            "TimedOut": 0
+        }
+        
+        # Update the device with the properly formatted parameters
+        devices_to_use[unit].Update(**update_dict)
         
     except Exception as e:
         Domoticz.Error(f"Error updating device {unit}: {str(e)}")
