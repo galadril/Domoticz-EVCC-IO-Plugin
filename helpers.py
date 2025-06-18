@@ -96,22 +96,37 @@ def get_device_unit(device_mapping, unit_device_mapping, device_type, device_id,
     
     # Create a new unit number based on device type
     base_unit = 1
+    
+    # Helper function to safely convert to int
+    def safe_int(value, default=0):
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            try:
+                if ':' in value:
+                    # Handle special case for vehicle IDs like "db:2"
+                    return int(value.split(':')[1])
+                return int(value)
+            except (ValueError, IndexError):
+                return default
+        return default
+    
     if device_type == "site":
         base_unit = UNIT_BASE_SITE
     elif device_type == "battery":
-        base_unit = UNIT_BASE_BATTERY + (int(device_id) if device_id.isdigit() else 0) * 10
+        base_unit = UNIT_BASE_BATTERY + safe_int(device_id) * 10
     elif device_type == "pv":
-        base_unit = UNIT_BASE_PV + (int(device_id) if device_id.isdigit() else 0) * 10
+        base_unit = UNIT_BASE_PV + safe_int(device_id) * 10
     elif device_type == "tariff":
         base_unit = UNIT_BASE_TARIFF
     elif device_type == "grid":
         base_unit = UNIT_BASE_GRID
     elif device_type == "vehicle":
-        base_unit = UNIT_BASE_VEHICLE + (int(device_id.split(':')[1]) if ':' in device_id else int(device_id)) * 20
+        base_unit = UNIT_BASE_VEHICLE + safe_int(device_id) * 20
     elif device_type == "loadpoint":
-        base_unit = UNIT_BASE_LOADPOINT + (int(device_id) if device_id.isdigit() else 0) * 20
+        base_unit = UNIT_BASE_LOADPOINT + safe_int(device_id) * 20
     elif device_type == "session":
-        base_unit = UNIT_BASE_SESSION + (int(device_id) if device_id.isdigit() else 0) * 10
+        base_unit = UNIT_BASE_SESSION + safe_int(device_id) * 10
     
     # Find the next available unit number
     unit = base_unit

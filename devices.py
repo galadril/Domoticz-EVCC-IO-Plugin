@@ -37,6 +37,15 @@ class DeviceManager:
         self.device_unit_mapping = {}
         self.unit_device_mapping = {}
         
+        # Helper function to safely get device ID
+        def get_device_id(text_id):
+            try:
+                if ':' in text_id:
+                    return text_id  # Keep special IDs (like "db:2") as is
+                return int(text_id)  # Convert to int if possible
+            except ValueError:
+                return text_id  # Keep as string if conversion fails
+        
         for unit in Devices:
             device = Devices[unit]
             # Try to extract mappings from device description if it follows our convention
@@ -44,7 +53,7 @@ class DeviceManager:
             match = re.search(r'^([a-z]+)_([a-zA-Z0-9:]+)_([a-z_]+)$', device.Description)
             if match:
                 device_type = match.group(1)
-                device_id = match.group(2)
+                device_id = get_device_id(match.group(2))
                 parameter = match.group(3)
                 
                 # Store in mapping
@@ -54,21 +63,13 @@ class DeviceManager:
                 
                 # Store vehicle info from Name and DeviceID if available
                 if device_type == "vehicle":
-                    if ":" in device_id:  # WebSocket format
-                        vehicle_name = device.Name.split(" ")[0]  # Get name before parameter
-                        self.vehicles[device_id] = vehicle_name
-                    else:  # REST API format
-                        int_id = int(device_id)
-                        vehicle_name = device.Name.split(" ")[0]  # Get name before parameter
-                        if int_id not in self.vehicles:
-                            self.vehicles[int_id] = vehicle_name
+                    vehicle_name = device.Name.split(" ")[0]  # Get name before parameter
+                    self.vehicles[device_id] = vehicle_name
                 
                 # Store loadpoint info
                 elif device_type == "loadpoint":
-                    int_id = int(device_id)
                     loadpoint_name = device.Name.split(" ")[0]  # Get name before parameter
-                    if int_id not in self.loadpoints:
-                        self.loadpoints[int_id] = loadpoint_name
+                    self.loadpoints[device_id] = loadpoint_name
                 
                 # Track battery presence
                 elif device_type == "battery":
@@ -344,6 +345,17 @@ class DeviceManager:
                            Switchtype=18, Image=9, Options=Options, Used=0, 
                            Description=f"vehicle_{vehicle_id}_status", 
                            DeviceID=external_id).Create()
+        
+        # Vehicle odometer
+        if "vehicleOdometer" in vehicle_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "vehicle", vehicle_id, "odometer", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;km'}
+                Domoticz.Log(f"Creating device '{vehicle_name} Odometer'.")
+                Domoticz.Device(Unit=unit, Name=f"{vehicle_name} Odometer", Type=243, Subtype=31,
+                              Options=options, Used=0, Description=f"vehicle_{vehicle_id}_odometer",
+                              DeviceID=external_id).Create()
     
     def create_loadpoint_devices(self, loadpoint_id, loadpoint_data, Devices):
         """Create Domoticz.Devices for a loadpoint"""
@@ -448,6 +460,64 @@ class DeviceManager:
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Timer", Type=243, Subtype=8, 
                            Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_charging_timer", 
                            DeviceID=external_id).Create()
+        
+        # Current limits
+        if "effectiveMinCurrent" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "min_current", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;A'}
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Min Current", Type=243, Subtype=23,
+                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_min_current").Create()
+
+        if "maxCurrent" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "max_current", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;A'}
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Max Current", Type=243, Subtype=23,
+                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_max_current").Create()
+
+        if "effectiveMaxCurrent" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "effective_max_current", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;A'}
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Effective Max Current", Type=243, Subtype=23,
+                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_effective_max_current").Create()
+
+        # Timing devices
+        if "enableDelay" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "enable_delay", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;s'}
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Enable Delay", Type=243, Subtype=8,
+                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_enable_delay").Create()
+
+        if "disableDelay" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "disable_delay", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;s'}
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Disable Delay", Type=243, Subtype=8,
+                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_disable_delay").Create()
+
+        if "chargeDuration" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "charge_duration", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;s'}
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charge Duration", Type=243, Subtype=8,
+                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_charge_duration").Create()
+
+        if "connectedDuration" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "connected_duration", True, Devices)
+            if unit not in Devices:
+                options = {'Custom': '1;s'}
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Connected Duration", Type=243, Subtype=8,
+                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_connected_duration").Create()
         
         # Create session statistics devices
         if "sessionEnergy" in loadpoint_data:
@@ -656,6 +726,13 @@ class DeviceManager:
                 elif status == "B": status_value = 20  # charging
                 elif status == "C": status_value = 30  # complete
                 update_device_value(unit, status_value, 0, Devices)
+        
+        # Update odometer
+        if "vehicleOdometer" in vehicle_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "vehicle", vehicle_id, "odometer", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, vehicle_data["vehicleOdometer"], Devices)
     
     def update_loadpoint_devices(self, loadpoint_id, loadpoint_data, Devices):
         """Update loadpoint Domoticz.Devices"""
@@ -723,6 +800,53 @@ class DeviceManager:
                     update_device_value(unit, 0, minutes, Devices)
             else:
                 update_device_value(unit, 0, 0, Devices)
+        
+        # Update current limits
+        if "effectiveMinCurrent" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "min_current", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, loadpoint_data["effectiveMinCurrent"], Devices)
+
+        if "maxCurrent" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "max_current", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, loadpoint_data["maxCurrent"], Devices)
+
+        if "effectiveMaxCurrent" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "effective_max_current", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, loadpoint_data["effectiveMaxCurrent"], Devices)
+
+        # Update timing devices
+        if "enableDelay" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "enable_delay", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, loadpoint_data["enableDelay"], Devices)
+
+        if "disableDelay" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "disable_delay", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, loadpoint_data["disableDelay"], Devices)
+
+        if "chargeDuration" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "charge_duration", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, loadpoint_data["chargeDuration"], Devices)
+
+        if "connectedDuration" in loadpoint_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "loadpoint", loadpoint_id, "connected_duration", False, Devices)
+            if unit is not None:
+                if loadpoint_data["connectedDuration"] == 2147483647:  # Max int value, means not connected
+                    update_device_value(unit, 0, 0, Devices)
+                else:
+                    update_device_value(unit, 0, loadpoint_data["connectedDuration"], Devices)
         
         # Update session statistics devices
         if "sessionEnergy" in loadpoint_data:
