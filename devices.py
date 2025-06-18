@@ -151,25 +151,28 @@ class DeviceManager:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "tariff", 1, "grid", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;EUR/kWh'}
-                Domoticz.Device(Unit=unit, Name="Grid Tariff", Type=243, Subtype=1,
-                              Options=options, Used=0, Description="tariff_1_grid").Create()
+                options = {"ValueQuantity": "Custom", "ValueUnits": "EUR/kWh"}
+                Domoticz.Device(Unit=unit, Name="Grid Tariff", Type=113, Subtype=0,
+                              Switchtype=3, Options=options, Used=0, 
+                              Description="tariff_1_grid").Create()
 
         if "tariffPriceHome" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "tariff", 1, "home", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;EUR/kWh'}
-                Domoticz.Device(Unit=unit, Name="Home Tariff", Type=243, Subtype=1,
-                              Options=options, Used=0, Description="tariff_1_home").Create()
+                options = {"ValueQuantity": "Custom", "ValueUnits": "EUR/kWh"}
+                Domoticz.Device(Unit=unit, Name="Home Tariff", Type=113, Subtype=0,
+                              Switchtype=3, Options=options, Used=0,
+                              Description="tariff_1_home").Create()
 
         if "tariffPriceLoadpoints" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "tariff", 1, "loadpoints", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;EUR/kWh'}
-                Domoticz.Device(Unit=unit, Name="Loadpoints Tariff", Type=243, Subtype=1,
-                              Options=options, Used=0, Description="tariff_1_loadpoints").Create()
+                options = {"ValueQuantity": "Custom", "ValueUnits": "EUR/kWh"}
+                Domoticz.Device(Unit=unit, Name="Loadpoints Tariff", Type=113, Subtype=0,
+                              Switchtype=3, Options=options, Used=0,
+                              Description="tariff_1_loadpoints").Create()
 
         # Create grid current devices
         if "grid" in site_data and isinstance(site_data["grid"], dict) and "currents" in site_data["grid"]:
