@@ -61,6 +61,17 @@ def update_device_value(unit, n_value, s_value, Devices=None):
                     s_value = f"{float(s_value):.3f}"
                 else:
                     s_value = str(s_value)
+            elif device.TypeName == "kWh":
+                # For kWh type, format as "instant_power;total_energy"
+                # For power devices, use power value and 0 for energy
+                # For energy devices, use 0 for power and energy value
+                if device.Description and ("power" in device.Description):
+                    s_value = f"{float(s_value):.1f};0"
+                else:
+                    s_value = f"0;{float(s_value):.3f}"
+            elif device.TypeName == "Usage":
+                # For Usage type, just use the power value
+                s_value = f"{float(s_value):.1f}"
             else:
                 s_value = str(s_value)
             

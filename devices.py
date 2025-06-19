@@ -99,40 +99,30 @@ class DeviceManager:
 
     def create_site_devices(self, site_data, Devices):
         """Create the site Domoticz.Devices based on available data"""
-        # Grid power
-        if "gridPower" in site_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "grid_power", True, Devices)
-            if unit not in Devices:
-                options = {'Custom': '1;Watt'}  # Define custom options for power sensor
-                Domoticz.Device(Unit=unit, Name="Grid Power", Type=243, Subtype=29, 
-                              Options=options, Used=0, Description="site_1_grid_power").Create()
-        elif "grid" in site_data and isinstance(site_data["grid"], dict) and "power" in site_data["grid"]:
+        # Grid power - only instant power, no cumulative energy
+        if "gridPower" in site_data or ("grid" in site_data and isinstance(site_data["grid"], dict) and "power" in site_data["grid"]):
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "site", 1, "grid_power", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;Watt'}  # Define custom options for power sensor
-                Domoticz.Device(Unit=unit, Name="Grid Power", Type=243, Subtype=29, 
-                              Options=options, Used=0, Description="site_1_grid_power").Create()
+                Domoticz.Device(Name="Grid Power", Unit=unit, TypeName='Usage',
+                              Description="site_1_grid_power").Create()
         
-        # Home power
+        # Home power - only instant power
         if "homePower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "home_power", True, Devices)
+                                 "site", 1, "home_power", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;Watt'}  # Define custom options for power sensor
-                Domoticz.Device(Unit=unit, Name="Home Power", Type=243, Subtype=29, 
-                              Options=options, Used=0, Description="site_1_home_power").Create()
+                Domoticz.Device(Name="Home Power", Unit=unit, TypeName='Usage',
+                              Description="site_1_home_power").Create()
                 
-        # PV power
+        # PV power - only instant power
         if "pvPower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "pv_power", True, Devices)
+                                 "site", 1, "pv_power", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;Watt'}  # Define custom options for power sensor
-                Domoticz.Device(Unit=unit, Name="PV Power", Type=243, Subtype=29, 
-                              Options=options, Used=0, Description="site_1_pv_power").Create()
-        
+                Domoticz.Device(Name="PV Power", Unit=unit, TypeName='Usage',
+                              Description="site_1_pv_power").Create()
+
         # Create PV system devices if available
         if "pv" in site_data and isinstance(site_data["pv"], list) and len(site_data["pv"]) > 0:
             self.create_pv_devices(site_data, Devices)
@@ -187,9 +177,8 @@ class DeviceManager:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "grid", 1, "energy", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;kWh'}
-                Domoticz.Device(Unit=unit, Name="Grid Energy", Type=243, Subtype=33,
-                              Options=options, Used=0, Description="grid_1_energy").Create()
+                Domoticz.Device(Unit=unit, Name="Grid Energy", TypeName='kWh', Switchtype=4,
+                              Description="grid_1_energy").Create()
 
         # Create green share devices
         if "greenShareHome" in site_data:
@@ -217,38 +206,37 @@ class DeviceManager:
             pv_name = pv_system.get("title", f"PV System {pv_id}")
             self.pv_systems[pv_id] = pv_name
             
-            # PV System Power
+            # PV System Power - only instant power
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "pv", pv_id, "power", True, Devices)
+                                 "pv", pv_id, "power", True, Devices)
             if unit not in Devices:
                 Domoticz.Log(f"Creating device '{pv_name} Power'.")
-                Domoticz.Device(Unit=unit, Name=f"{pv_name} Power", Type=243, Subtype=29, 
-                               Used=0, Description=f"pv_{pv_id}_power").Create()
+                Domoticz.Device(Unit=unit, Name=f"{pv_name} Power", TypeName='Usage',
+                              Description=f"pv_{pv_id}_power").Create()
     
     def create_battery_devices(self, site_data, Devices):
         """Create battery Domoticz.Devices"""
-        # Battery power
+        # Battery power - only instant power
         if "batteryPower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "battery", 1, "power", True, Devices)
+                                 "battery", 1, "power", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;Watt'}  # Define custom options for power sensor
-                Domoticz.Device(Unit=unit, Name="Battery Power", Type=243, Subtype=29, 
-                               Options=options, Used=0, Description="battery_1_power").Create()
+                Domoticz.Device(Unit=unit, Name="Battery Power", TypeName='Usage',
+                              Description="battery_1_power").Create()
                 
         # Battery SoC
         if "batterySoc" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "battery", 1, "soc", True, Devices)
+                                 "battery", 1, "soc", True, Devices)
             if unit not in Devices:
                 options = {'Custom': '1;%'}  # Define custom options for percentage sensor
                 Domoticz.Device(Unit=unit, Name="Battery State of Charge", Type=243, Subtype=6, 
-                               Options=options, Used=0, Description="battery_1_soc").Create()
+                              Options=options, Used=0, Description="battery_1_soc").Create()
                 
         # Battery mode
         if "batteryMode" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "battery", 1, "mode", True, Devices)
+                                 "battery", 1, "mode", True, Devices)
             if unit not in Devices:
                 Options = {"LevelActions": "|||||",
                           "LevelNames": "Unknown|Normal|Hold|Charge|External",
@@ -269,15 +257,14 @@ class DeviceManager:
             battery_id = i + 1
             battery_name = battery.get("title", f"Battery {battery_id}")
             
-            # Battery power
+            # Battery power - only instant power
             if "power" in battery:
                 unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                     "battery", battery_id, "power", True, Devices)
                 if unit not in Devices:
-                    options = {'Custom': '1;Watt'}  # Define custom options for power sensor
                     Domoticz.Log(f"Creating device '{battery_name} Power'.")
-                    Domoticz.Device(Unit=unit, Name=f"{battery_name} Power", Type=243, Subtype=29, 
-                                  Options=options, Used=0, Description=f"battery_{battery_id}_power").Create()
+                    Domoticz.Device(Unit=unit, Name=f"{battery_name} Power", TypeName='Usage',
+                                  Description=f"battery_{battery_id}_power").Create()
                     
             # Battery SoC
             if "soc" in battery:
@@ -381,25 +368,21 @@ class DeviceManager:
         if "original_id" in loadpoint_data:
             external_id = loadpoint_data["original_id"]
         
-        # Charging power
+        # Charging power - only instant power
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                               "loadpoint", loadpoint_id, "charging_power", True, Devices)
         if unit not in Devices:
-            options = {'Custom': '1;Watt'}  # Define custom options for power sensor
             Domoticz.Log(f"Creating device '{loadpoint_name} Charging Power'.")
-            Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Power", Type=243, Subtype=29, 
-                           Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_charging_power", 
-                           DeviceID=external_id).Create()
+            Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Power", TypeName='Usage',
+                          Description=f"loadpoint_{loadpoint_id}_charging_power").Create()
         
-        # Charged energy (kWh)
+        # Charged energy - cumulative energy device
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                               "loadpoint", loadpoint_id, "charged_energy", True, Devices)
         if unit not in Devices:
-            options = {'Custom': '1;kWh'}  # Define custom options for energy sensor
             Domoticz.Log(f"Creating device '{loadpoint_name} Charged Energy'.")
-            Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charged Energy", Type=243, Subtype=33, 
-                           Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_charged_energy", 
-                           DeviceID=external_id).Create()
+            Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charged Energy", TypeName='kWh',
+                          Description=f"loadpoint_{loadpoint_id}_charged_energy").Create()
             
         # Charging mode selector
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
@@ -524,9 +507,8 @@ class DeviceManager:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "loadpoint", loadpoint_id, "session_energy", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;kWh'}
-                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Energy", Type=243, Subtype=33,
-                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_session_energy").Create()
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Energy", TypeName='kWh',
+                              Description=f"loadpoint_{loadpoint_id}_session_energy").Create()
 
         if "sessionPrice" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
