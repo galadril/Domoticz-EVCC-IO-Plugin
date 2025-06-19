@@ -26,6 +26,8 @@
 import Domoticz
 import time
 import json
+import os
+from shutil import copy2
 
 # Import our modules
 from api import EVCCApi
@@ -51,7 +53,43 @@ class BasePlugin:
         self.max_ws_retries = 3  # Maximum number of WebSocket reconnection attempts
         self.last_ws_reconnect = 0  # Track last websocket reconnection time
         self.ws_reconnect_interval = 60  # Force reconnect every 60 seconds
+        self.plugin_path = os.path.dirname(os.path.realpath(__file__))
         
+    def _install_custom_page(self):
+        """Install the custom EVCC dashboard page"""
+        html_file = os.path.join(self.plugin_path, 'evcc.html')
+        target_file = os.path.join('www', 'templates', 'evcc.html')
+        
+        # Update IP address in the HTML file
+        with open(html_file, 'r') as f:
+            content = f.read()
+        
+        # Replace the IP address placeholder with the configured address
+        content = content.replace('192.168.1.25', Parameters["Address"])
+        content = content.replace('7070', Parameters["Port"])
+        
+        # Write the updated content to a temporary file
+        temp_file = os.path.join(self.plugin_path, 'evcc_temp.html')
+        with open(temp_file, 'w') as f:
+            f.write(content)
+        
+        # Copy the temporary file to the target location
+        if os.path.exists(target_file):
+            os.remove(target_file)
+        copy2(temp_file, target_file)
+        
+        # Clean up temporary file
+        os.remove(temp_file)
+        
+        Domoticz.Log("Custom EVCC dashboard installed successfully")
+        
+    def _remove_custom_page(self):
+        """Remove the custom EVCC dashboard page"""
+        target_file = os.path.join('www', 'templates', 'evcc.html')
+        if os.path.exists(target_file):
+            os.remove(target_file)
+            Domoticz.Log("Custom EVCC dashboard removed")
+
     def onStart(self):
         Domoticz.Debug("onStart called")
         
@@ -86,7 +124,16 @@ class BasePlugin:
         # Fetch initial state to create devices
         self._get_initial_state()
         
+        # Install custom page
+        self._install_custom_page()
+        
         Domoticz.Heartbeat(10)
+        
+    def onStop(self):
+        Domoticz.Debug("onStop called")
+        if self.api:
+            self.api.logout()
+        self._remove_custom_page()
 
     def _initialize_websocket(self):
         """Initialize WebSocket connection"""
@@ -315,229 +362,6 @@ class BasePlugin:
                         self.device_manager.create_vehicle_devices(vehicle_index, vehicle, Devices)
                         vehicle_index += 1
 
-    def onStop(self):
-        Domoticz.Debug("onStop called")
-        if self.api:
-            self.api.logout()
-
-    def update_devices_rest(self):
-        """Update devices using REST API"""
-        try:
-            state = self.api.get_state()
-            if state:
-                self.last_data = state
-                self._update_devices_from_rest_api_data(state)
-        except Exception as e:
-            Domoticz.Error(f"Error updating devices via REST API: {str(e)}")
-
-    def update_devices(self):
-        """Update devices with current data"""
-        if not self.last_data:
-            return
-            
-        try:
-            # Check for loadpoint structure that's common in WebSocket format
-            has_loadpoint_prefix = any(key.startswith("loadpoints.") for key in self.last_data)
-                
-            if has_loadpoint_prefix:
-                # This is a flat structure from WebSocket
-                self._update_devices_from_websocket_data(self.last_data)
-            else:
-                # This is the original REST API nested structure
-                self._update_devices_from_rest_api_data(self.last_data)
-                    
-        except Exception as e:
-            Domoticz.Error(f"Error updating devices: {str(e)}")
-    
-    def _update_devices_from_websocket_data(self, data):
-        """Update devices with WebSocket data"""
-        # Extract site-level data
-        site_data = {
-            key: value for key, value in data.items() 
-            if not key.startswith(("loadpoints.", "vehicles."))
-        }
-        
-        # Update site and battery information
-        self.device_manager.update_site_devices(site_data, Devices)
-        
-        # If battery is present, update battery devices
-        if self.device_manager.battery_present:
-            if "battery" in site_data and isinstance(site_data["battery"], list) and site_data["battery"]:
-                self.device_manager.update_battery_devices_from_array(site_data, Devices)
-            else:
-                self.device_manager.update_battery_devices(site_data, Devices)
-        
-        # Update loadpoint data
-        loadpoint_indexes = set()
-        for key in data.keys():
-            if key.startswith("loadpoints."):
-                parts = key.split(".")
-                if len(parts) >= 2:
-                    loadpoint_index = parts[1]
-                    if loadpoint_index.isdigit():
-                        loadpoint_indexes.add(int(loadpoint_index))
-        
-        # Then update each loadpoint's data
-        for idx in loadpoint_indexes:
-            prefix = f"loadpoints.{idx}."
-            loadpoint_data = {
-                key[len(prefix):]: value 
-                for key, value in data.items() 
-                if key.startswith(prefix)
-            }
-            
-            # Create or update loadpoint with a numeric ID
-            loadpoint_id = idx + 1
-            
-            # If this is a new loadpoint, create devices for it
-            if loadpoint_id not in self.device_manager.loadpoints:
-                if "title" in loadpoint_data:
-                    self.device_manager.loadpoints[loadpoint_id] = loadpoint_data["title"]
-                else:
-                    self.device_manager.loadpoints[loadpoint_id] = f"Loadpoint {loadpoint_id}"
-                self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint_data, Devices)
-            
-            # Update the devices for this loadpoint
-            self.device_manager.update_loadpoint_devices(loadpoint_id, loadpoint_data, Devices)
-        
-        # Process vehicle data if available
-        if "vehicles" in data and isinstance(data["vehicles"], dict):
-            # First try to map external IDs to our internal IDs
-            vehicle_id_mapping = {}
-            
-            # Scan through existing devices to find vehicles and their external IDs
-            for unit in Devices:
-                device_info = self.device_manager.get_device_info(unit)
-                if device_info and device_info["device_type"] == "vehicle":
-                    if Devices[unit].DeviceID and Devices[unit].DeviceID in data["vehicles"]:
-                        internal_id = int(device_info["device_id"])
-                        external_id = Devices[unit].DeviceID
-                        vehicle_id_mapping[external_id] = internal_id
-            
-            # Process each vehicle
-            for vehicle_id_str, vehicle_data in data["vehicles"].items():
-                if isinstance(vehicle_data, dict):
-                    if vehicle_id_str in vehicle_id_mapping:
-                        # Update existing vehicle
-                        our_vehicle_id = vehicle_id_mapping[vehicle_id_str]
-                        self.device_manager.update_vehicle_devices(our_vehicle_id, vehicle_data, Devices)
-                    else:
-                        # Create new vehicle
-                        our_vehicle_id = len(self.device_manager.vehicles) + 1
-                        vehicle_name = vehicle_data.get("title", f"Vehicle {our_vehicle_id}")
-                        self.device_manager.vehicles[our_vehicle_id] = vehicle_name
-                        vehicle_data["original_id"] = vehicle_id_str
-                        self.device_manager.create_vehicle_devices(our_vehicle_id, vehicle_data, Devices)
-    
-    def _update_devices_from_rest_api_data(self, state):
-        """Update devices with REST API data"""
-        # Update site and battery information
-        if "site" in state:
-            site_data = state["site"]
-            self.device_manager.update_site_devices(site_data, Devices)
-            
-            # Update battery devices if present
-            if self.device_manager.battery_present:
-                self.device_manager.update_battery_devices(site_data, Devices)
-        
-        # Update vehicle information
-        if "vehicles" in state:
-            vehicles = state["vehicles"]
-            if isinstance(vehicles, list):
-                for i, vehicle in enumerate(vehicles):
-                    vehicle_id = i + 1
-                    if isinstance(vehicle, dict):
-                        if vehicle_id not in self.device_manager.vehicles:
-                            vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {vehicle_id}"))
-                            self.device_manager.vehicles[vehicle_id] = vehicle_name
-                            # Store the original ID in the vehicle data for API calls
-                            vehicle["original_id"] = str(vehicle_id)
-                            self.device_manager.create_vehicle_devices(vehicle_id, vehicle, Devices)
-                        self.device_manager.update_vehicle_devices(vehicle_id, vehicle, Devices)
-            elif isinstance(vehicles, dict):
-                # First try to find existing vehicles with external IDs
-                vehicle_id_mapping = {}
-                
-                # Scan through existing devices to find vehicles and their external IDs
-                for unit in Devices:
-                    device_info = self.device_manager.get_device_info(unit)
-                    if device_info and device_info["device_type"] == "vehicle":
-                        if Devices[unit].DeviceID and Devices[unit].DeviceID in vehicles:
-                            internal_id = int(device_info["device_id"])
-                            external_id = Devices[unit].DeviceID
-                            vehicle_id_mapping[external_id] = internal_id
-                            
-                            # Ensure we have a clean name in the vehicles dict
-                            if internal_id in self.device_manager.vehicles and isinstance(self.device_manager.vehicles[internal_id], dict):
-                                # Extract just the name from the dict if needed
-                                if "name" in self.device_manager.vehicles[internal_id]:
-                                    self.device_manager.vehicles[internal_id] = self.device_manager.vehicles[internal_id]["name"]
-                
-                # Process vehicles, updating if known or creating if new
-                for vehicle_id_str, vehicle in vehicles.items():
-                    if vehicle_id_str in vehicle_id_mapping:
-                        # We already know this vehicle, update it
-                        our_vehicle_id = vehicle_id_mapping[vehicle_id_str]
-                        self.device_manager.update_vehicle_devices(our_vehicle_id, vehicle, Devices)
-                    else:
-                        # This is a new vehicle
-                        our_vehicle_id = len(self.device_manager.vehicles) + 1
-                        if isinstance(vehicle, dict):
-                            vehicle_name = vehicle.get("title", vehicle.get("name", f"Vehicle {our_vehicle_id}"))
-                            self.device_manager.vehicles[our_vehicle_id] = vehicle_name
-                            # Store the external ID in the vehicle data
-                            vehicle["original_id"] = vehicle_id_str
-                            self.device_manager.create_vehicle_devices(our_vehicle_id, vehicle, Devices)
-        
-        # Update loadpoint information
-        if "loadpoints" in state:
-            loadpoints = state["loadpoints"]
-            if isinstance(loadpoints, list):
-                for i, loadpoint in enumerate(loadpoints):
-                    loadpoint_id = i + 1
-                    if isinstance(loadpoint, dict):
-                        if loadpoint_id not in self.device_manager.loadpoints:
-                            loadpoint_name = loadpoint.get("title", f"Loadpoint {loadpoint_id}")
-                            self.device_manager.loadpoints[loadpoint_id] = loadpoint_name
-                            # Store the original ID in the loadpoint data for API calls
-                            loadpoint["original_id"] = str(loadpoint_id)
-                            self.device_manager.create_loadpoint_devices(loadpoint_id, loadpoint, Devices)
-                        self.device_manager.update_loadpoint_devices(loadpoint_id, loadpoint, Devices)
-            elif isinstance(loadpoints, dict):
-                # First try to find existing loadpoints with external IDs
-                loadpoint_id_mapping = {}
-                
-                # Scan through existing devices to find loadpoints and their external IDs
-                for unit in Devices:
-                    device_info = self.device_manager.get_device_info(unit)
-                    if device_info and device_info["device_type"] == "loadpoint":
-                        if Devices[unit].DeviceID and Devices[unit].DeviceID in loadpoints:
-                            internal_id = int(device_info["device_id"])
-                            external_id = Devices[unit].DeviceID
-                            loadpoint_id_mapping[external_id] = internal_id
-                            
-                            # Ensure we have a clean name in the loadpoints dict
-                            if internal_id in self.device_manager.loadpoints and isinstance(self.device_manager.loadpoints[internal_id], dict):
-                                # Extract just the name from the dict if needed
-                                if "name" in self.device_manager.loadpoints[internal_id]:
-                                    self.device_manager.loadpoints[internal_id] = self.device_manager.loadpoints[internal_id]["name"]
-                
-                # Process loadpoints, updating if known or creating if new
-                for loadpoint_id_str, loadpoint in loadpoints.items():
-                    if loadpoint_id_str in loadpoint_id_mapping:
-                        # We already know this loadpoint, update it
-                        our_loadpoint_id = loadpoint_id_mapping[loadpoint_id_str]
-                        self.device_manager.update_loadpoint_devices(our_loadpoint_id, loadpoint, Devices)
-                    else:
-                        # This is a new loadpoint
-                        our_loadpoint_id = len(self.device_manager.loadpoints) + 1
-                        if isinstance(loadpoint, dict):
-                            loadpoint_name = loadpoint.get("title", f"Loadpoint {our_loadpoint_id}")
-                            self.device_manager.loadpoints[our_loadpoint_id] = loadpoint_name
-                            # Store the external ID in the loadpoint data
-                            loadpoint["original_id"] = loadpoint_id_str
-                            self.device_manager.create_loadpoint_devices(our_loadpoint_id, loadpoint, Devices)
-            
     def onCommand(self, Unit, Command, Level, Hue):
         """Handle commands sent to devices"""
         Domoticz.Debug(f"onCommand called for Unit: {Unit} Command: {Command} Level: {Level}")
