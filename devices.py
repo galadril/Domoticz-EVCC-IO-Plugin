@@ -145,7 +145,7 @@ class DeviceManager:
                                  "tariff", 1, "grid", True, Devices)
             if unit not in Devices:
                 Domoticz.Log(f"Creating Grid Tariff device")
-                options = {'Custom': '1;€'}
+                options = {'Custom': '1;EUR'}
                 Domoticz.Device(Unit=unit, Name="Grid Tariff", Type=243, Subtype=31,
                               Options=options, Used=0, Description="tariff_1_grid").Create()
 
@@ -154,7 +154,7 @@ class DeviceManager:
                                  "tariff", 1, "home", True, Devices)
             if unit not in Devices:
                 Domoticz.Log(f"Creating Home Tariff device")
-                options = {'Custom': '1;€'}
+                options = {'Custom': '1;EUR'}
                 Domoticz.Device(Unit=unit, Name="Home Tariff", Type=243, Subtype=31,
                               Options=options, Used=0, Description="tariff_1_home").Create()
 
@@ -163,7 +163,7 @@ class DeviceManager:
                                  "tariff", 1, "loadpoints", True, Devices)
             if unit not in Devices:
                 Domoticz.Log(f"Creating Loadpoints Tariff device")
-                options = {'Custom': '1;€'}
+                options = {'Custom': '1;EUR'}
                 Domoticz.Device(Unit=unit, Name="Loadpoints Tariff", Type=243, Subtype=31,
                               Options=options, Used=0, Description="tariff_1_loadpoints").Create()
 
