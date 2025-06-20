@@ -53,7 +53,7 @@ def update_device_value(unit, n_value, s_value, Devices=None):
                     s_value = f"0;{float(s_value):.3f}"
                 elif device.SubType == 6:  # Percentage
                     s_value = f"{float(s_value):.1f}"
-                elif device.SubType == 31:  # Distance (km)
+                elif device.SubType == 31:
                     s_value = f"{float(s_value):.1f}"
                 elif device.SubType == 8:  # Counter
                     s_value = f"{float(s_value):.0f}"

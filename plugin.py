@@ -362,6 +362,96 @@ class BasePlugin:
                         self.device_manager.create_vehicle_devices(vehicle_index, vehicle, Devices)
                         vehicle_index += 1
 
+    def _update_devices_from_websocket_data(self, data):
+        """Update devices from flat WebSocket data structure"""
+        try:
+            # Extract site-level data (grid, home, pv, etc.)
+            site_data = {
+                key: value for key, value in data.items() 
+                if not key.startswith(("loadpoints.", "vehicles."))
+            }
+            
+            # Update site devices including PV and battery
+            if site_data:
+                self.device_manager.update_site_devices(site_data, Devices)
+
+            # Parse and update loadpoint data
+            loadpoint_indexes = set()
+            for key in data.keys():
+                if key.startswith("loadpoints."):
+                    parts = key.split(".")
+                    if len(parts) >= 2 and parts[1].isdigit():
+                        loadpoint_indexes.add(int(parts[1]))
+            
+            # Update each loadpoint's devices
+            for idx in loadpoint_indexes:
+                prefix = f"loadpoints.{idx}."
+                loadpoint_data = {
+                    key[len(prefix):]: value 
+                    for key, value in data.items() 
+                    if key.startswith(prefix)
+                }
+                
+                # Update loadpoint with numeric ID
+                loadpoint_id = idx + 1
+                
+                # Map WebSocket fields to expected fields if needed
+                if "chargePower" not in loadpoint_data and "chargePower" in site_data:
+                    loadpoint_data["chargePower"] = site_data["chargePower"]
+                
+                self.device_manager.update_loadpoint_devices(loadpoint_id, loadpoint_data, Devices)
+
+            # Update vehicle data
+            if "vehicles" in data and isinstance(data["vehicles"], dict):
+                vehicle_index = 1
+                for vehicle_id_str, vehicle_data in data["vehicles"].items():
+                    if isinstance(vehicle_data, dict):
+                        self.device_manager.update_vehicle_devices(vehicle_index, vehicle_data, Devices)
+                        vehicle_index += 1
+
+        except Exception as e:
+            Domoticz.Error(f"Error updating devices from WebSocket data: {str(e)}")
+
+    def _update_devices_from_rest_api_data(self, state):
+        """Update devices from nested REST API data structure"""
+        try:
+            # Update site devices
+            if "site" in state:
+                self.device_manager.update_site_devices(state["site"], Devices)
+            
+            # Update loadpoint devices
+            if "loadpoints" in state:
+                loadpoints = state["loadpoints"]
+                if isinstance(loadpoints, list):
+                    for i, loadpoint in enumerate(loadpoints):
+                        loadpoint_id = i + 1
+                        if isinstance(loadpoint, dict):
+                            self.device_manager.update_loadpoint_devices(loadpoint_id, loadpoint, Devices)
+                elif isinstance(loadpoints, dict):
+                    loadpoint_index = 1
+                    for loadpoint_id_str, loadpoint in loadpoints.items():
+                        if isinstance(loadpoint, dict):
+                            self.device_manager.update_loadpoint_devices(loadpoint_index, loadpoint, Devices)
+                            loadpoint_index += 1
+            
+            # Update vehicle devices
+            if "vehicles" in state:
+                vehicles = state["vehicles"]
+                if isinstance(vehicles, list):
+                    for i, vehicle in enumerate(vehicles):
+                        vehicle_id = i + 1
+                        if isinstance(vehicle, dict):
+                            self.device_manager.update_vehicle_devices(vehicle_id, vehicle, Devices)
+                elif isinstance(vehicles, dict):
+                    vehicle_index = 1
+                    for vehicle_id_str, vehicle in vehicles.items():
+                        if isinstance(vehicle, dict):
+                            self.device_manager.update_vehicle_devices(vehicle_index, vehicle, Devices)
+                            vehicle_index += 1
+
+        except Exception as e:
+            Domoticz.Error(f"Error updating devices from REST API data: {str(e)}")
+
     def onCommand(self, Unit, Command, Level, Hue):
         """Handle commands sent to devices"""
         Domoticz.Debug(f"onCommand called for Unit: {Unit} Command: {Command} Level: {Level}")
