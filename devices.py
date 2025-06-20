@@ -99,8 +99,6 @@ class DeviceManager:
 
     def create_site_devices(self, site_data, Devices):
         """Create the site Domoticz.Devices based on available data"""
-        # Comment out non-tariff devices for now
-        """
         # Grid power - only instant power, no cumulative energy
         if "gridPower" in site_data or ("grid" in site_data and isinstance(site_data["grid"], dict) and "power" in site_data["grid"]):
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
@@ -128,7 +126,8 @@ class DeviceManager:
         # Create PV system devices if available
         if "pv" in site_data and isinstance(site_data["pv"], list) and len(site_data["pv"]) > 0:
             self.create_pv_devices(site_data, Devices)
-                
+            
+        """          
         # Battery Domoticz.Devices if present
         if any(key in site_data for key in ["batteryPower", "batterySoc", "batteryMode"]):
             self.battery_present = True
@@ -138,7 +137,6 @@ class DeviceManager:
             self.battery_present = True
             self.create_battery_devices_from_array(site_data, Devices)
         """
-        
         # Create tariff devices with correct type and format
         if "tariffGrid" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
@@ -171,7 +169,6 @@ class DeviceManager:
         """Create PV system devices"""
         pv_systems = site_data.get("pv", [])
         
-        """
         for i, pv_system in enumerate(pv_systems):
             pv_id = i + 1
             pv_name = pv_system.get("title", f"PV System {pv_id}")
@@ -181,10 +178,18 @@ class DeviceManager:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "pv", pv_id, "power", True, Devices)
             if unit not in Devices:
-                Domoticz.Log(f"Creating device '{pv_name} Power'.")
+                Domoticz.Log(f"Creating device '{pv_name} Power'")
                 Domoticz.Device(Unit=unit, Name=f"{pv_name} Power", TypeName='Usage',
                               Description=f"pv_{pv_id}_power").Create()
-        """
+            
+            # Add PV energy meter if available
+            if "energy" in pv_system:
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                     "pv", pv_id, "energy", True, Devices)
+                if unit not in Devices:
+                    Domoticz.Log(f"Creating device '{pv_name} Energy'")
+                    Domoticz.Device(Unit=unit, Name=f"{pv_name} Energy", TypeName='kWh',
+                                  Description=f"pv_{pv_id}_energy").Create()
     
     def create_battery_devices(self, site_data, Devices):
         """Create battery Domoticz.Devices"""
@@ -612,7 +617,18 @@ class DeviceManager:
                 unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                       "pv", pv_id, "power", False, Devices)
                 if unit is not None:
-                    update_device_value(unit, 0, pv_system["power"], Devices)
+                    power = pv_system["power"]
+                    Domoticz.Debug(f"Updating PV system {pv_id} power to: {power}W")
+                    update_device_value(unit, 0, power, Devices)
+            
+            # PV System Energy
+            if "energy" in pv_system:
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                      "pv", pv_id, "energy", False, Devices)
+                if unit is not None:
+                    energy = pv_system["energy"]
+                    Domoticz.Debug(f"Updating PV system {pv_id} energy to: {energy}kWh")
+                    update_device_value(unit, 0, energy, Devices)
     
     def update_battery_devices(self, site_data, Devices):
         """Update battery Domoticz.Devices"""
