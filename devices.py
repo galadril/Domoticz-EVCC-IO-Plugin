@@ -99,6 +99,8 @@ class DeviceManager:
 
     def create_site_devices(self, site_data, Devices):
         """Create the site Domoticz.Devices based on available data"""
+        # Comment out non-tariff devices for now
+        """
         # Grid power - only instant power, no cumulative energy
         if "gridPower" in site_data or ("grid" in site_data and isinstance(site_data["grid"], dict) and "power" in site_data["grid"]):
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
@@ -135,68 +137,36 @@ class DeviceManager:
         elif "battery" in site_data and isinstance(site_data["battery"], list):
             self.battery_present = True
             self.create_battery_devices_from_array(site_data, Devices)
+        """
         
-        # Create tariff devices
+        # Create tariff devices with correct type and format
         if "tariffGrid" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "tariff", 1, "grid", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;EUR/kWh'}
-                Domoticz.Device(Unit=unit, Name="Grid Tariff", Type=243, Subtype=1,
+                Domoticz.Log(f"Creating Grid Tariff device")
+                options = {'Custom': '1;€'}
+                Domoticz.Device(Unit=unit, Name="Grid Tariff", Type=243, Subtype=31,
                               Options=options, Used=0, Description="tariff_1_grid").Create()
 
         if "tariffPriceHome" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "tariff", 1, "home", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;EUR/kWh'}
-                Domoticz.Device(Unit=unit, Name="Home Tariff", Type=243, Subtype=1,
+                Domoticz.Log(f"Creating Home Tariff device")
+                options = {'Custom': '1;€'}
+                Domoticz.Device(Unit=unit, Name="Home Tariff", Type=243, Subtype=31,
                               Options=options, Used=0, Description="tariff_1_home").Create()
 
         if "tariffPriceLoadpoints" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "tariff", 1, "loadpoints", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;EUR/kWh'}
-                Domoticz.Device(Unit=unit, Name="Loadpoints Tariff", Type=243, Subtype=1,
+                Domoticz.Log(f"Creating Loadpoints Tariff device")
+                options = {'Custom': '1;€'}
+                Domoticz.Device(Unit=unit, Name="Loadpoints Tariff", Type=243, Subtype=31,
                               Options=options, Used=0, Description="tariff_1_loadpoints").Create()
 
-        # Create grid current devices
-        if "grid" in site_data and isinstance(site_data["grid"], dict) and "currents" in site_data["grid"]:
-            currents = site_data["grid"]["currents"]
-            for phase in range(len(currents)):
-                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                     "grid", 1, f"current_l{phase+1}", True, Devices)
-                if unit not in Devices:
-                    options = {'Custom': '1;A'}
-                    Domoticz.Device(Unit=unit, Name=f"Grid Current L{phase+1}", Type=243, Subtype=23,
-                                  Options=options, Used=0, Description=f"grid_1_current_l{phase+1}").Create()
-
-        # Create grid energy device
-        if "grid" in site_data and isinstance(site_data["grid"], dict) and "energy" in site_data["grid"]:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                 "grid", 1, "energy", True, Devices)
-            if unit not in Devices:
-                Domoticz.Device(Unit=unit, Name="Grid Energy", TypeName='kWh', Switchtype=4,
-                              Description="grid_1_energy").Create()
-
-        # Create green share devices
-        if "greenShareHome" in site_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                 "site", 1, "green_share_home", True, Devices)
-            if unit not in Devices:
-                options = {'Custom': '1;%'}
-                Domoticz.Device(Unit=unit, Name="Home Green Share", Type=243, Subtype=6,
-                              Options=options, Used=0, Description="site_1_green_share_home").Create()
-
-        if "greenShareLoadpoints" in site_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                 "site", 1, "green_share_loadpoints", True, Devices)
-            if unit not in Devices:
-                options = {'Custom': '1;%'}
-                Domoticz.Device(Unit=unit, Name="Loadpoints Green Share", Type=243, Subtype=6,
-                              Options=options, Used=0, Description="site_1_green_share_loadpoints").Create()
-    
     def create_pv_devices(self, site_data, Devices):
         """Create PV system devices"""
         pv_systems = site_data.get("pv", [])
@@ -536,83 +506,27 @@ class DeviceManager:
     
     def update_site_devices(self, site_data, Devices):
         """Update site Domoticz.Devices"""
-        # Grid power - handle both formats (direct or nested in grid object)
-        if "gridPower" in site_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "grid_power", False, Devices)
-            if unit is not None:
-                update_device_value(unit, 0, site_data["gridPower"], Devices)
-        elif "grid" in site_data and isinstance(site_data["grid"], dict) and "power" in site_data["grid"]:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "grid_power", False, Devices)
-            if unit is not None:
-                update_device_value(unit, 0, site_data["grid"]["power"], Devices)
-        
-        # Home power
-        if "homePower" in site_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "home_power", False, Devices)
-            if unit is not None:
-                update_device_value(unit, 0, site_data["homePower"], Devices)
-                
-        # PV power
-        if "pvPower" in site_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "pv_power", False, Devices)
-            if unit is not None:
-                update_device_value(unit, 0, site_data["pvPower"], Devices)
-        
-        # Update PV system devices if available
-        if "pv" in site_data and isinstance(site_data["pv"], list) and len(site_data["pv"]) > 0:
-            self.update_pv_devices(site_data, Devices)
-        
         # Update tariff devices
         if "tariffGrid" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "tariff", 1, "grid", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, site_data["tariffGrid"], Devices)
+                Domoticz.Debug(f"Updating Grid Tariff device to: {site_data['tariffGrid']}")
+                update_device_value(unit, 0, str(site_data["tariffGrid"]), Devices)
 
         if "tariffPriceHome" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "tariff", 1, "home", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, site_data["tariffPriceHome"], Devices)
+                Domoticz.Debug(f"Updating Home Tariff device to: {site_data['tariffPriceHome']}")
+                update_device_value(unit, 0, str(site_data["tariffPriceHome"]), Devices)
 
         if "tariffPriceLoadpoints" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "tariff", 1, "loadpoints", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, site_data["tariffPriceLoadpoints"], Devices)
-
-        # Update grid current devices
-        if "grid" in site_data and isinstance(site_data["grid"], dict) and "currents" in site_data["grid"]:
-            currents = site_data["grid"]["currents"]
-            for phase in range(len(currents)):
-                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                     "grid", 1, f"current_l{phase+1}", False, Devices)
-                if unit is not None:
-                    update_device_value(unit, 0, currents[phase], Devices)
-
-        # Update grid energy device
-        if "grid" in site_data and isinstance(site_data["grid"], dict) and "energy" in site_data["grid"]:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                 "grid", 1, "energy", False, Devices)
-            if unit is not None:
-                update_device_value(unit, 0, site_data["grid"]["energy"], Devices)
-
-        # Update green share devices
-        if "greenShareHome" in site_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                 "site", 1, "green_share_home", False, Devices)
-            if unit is not None:
-                update_device_value(unit, 0, site_data["greenShareHome"] * 100, Devices)
-
-        if "greenShareLoadpoints" in site_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                 "site", 1, "green_share_loadpoints", False, Devices)
-            if unit is not None:
-                update_device_value(unit, 0, site_data["greenShareLoadpoints"] * 100, Devices)
+                Domoticz.Debug(f"Updating Loadpoints Tariff device to: {site_data['tariffPriceLoadpoints']}")
+                update_device_value(unit, 0, str(site_data["tariffPriceLoadpoints"]), Devices)
     
     def update_pv_devices(self, site_data, Devices):
         """Update PV system devices"""
