@@ -145,7 +145,7 @@ class DeviceManager:
                                  "tariff", 1, "grid", True, Devices)
             if unit not in Devices:
                 Domoticz.Log(f"Creating Grid Tariff device")
-                options = {'Custom': '1;EUR'}
+                options = {'Custom': '1;ct/kWh'}
                 Domoticz.Device(Unit=unit, Name="Grid Tariff", Type=243, Subtype=31,
                               Options=options, Used=0, Description="tariff_1_grid").Create()
 
@@ -154,7 +154,7 @@ class DeviceManager:
                                  "tariff", 1, "home", True, Devices)
             if unit not in Devices:
                 Domoticz.Log(f"Creating Home Tariff device")
-                options = {'Custom': '1;EUR'}
+                options = {'Custom': '1;ct/kWh'}
                 Domoticz.Device(Unit=unit, Name="Home Tariff", Type=243, Subtype=31,
                               Options=options, Used=0, Description="tariff_1_home").Create()
 
@@ -163,7 +163,7 @@ class DeviceManager:
                                  "tariff", 1, "loadpoints", True, Devices)
             if unit not in Devices:
                 Domoticz.Log(f"Creating Loadpoints Tariff device")
-                options = {'Custom': '1;EUR'}
+                options = {'Custom': '1;ct/kWh'}
                 Domoticz.Device(Unit=unit, Name="Loadpoints Tariff", Type=243, Subtype=31,
                               Options=options, Used=0, Description="tariff_1_loadpoints").Create()
 
@@ -551,19 +551,25 @@ class DeviceManager:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "tariff", 1, "grid", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, site_data["tariffGrid"], Devices)
+                value = float(site_data["tariffGrid"]) * 100  # Convert to cents
+                Domoticz.Debug(f"Updating Grid Tariff device (Unit {unit}) to: {value} cents")
+                update_device_value(unit, 0, str(value), Devices)
 
         if "tariffPriceHome" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "tariff", 1, "home", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, site_data["tariffPriceHome"], Devices)
+                value = float(site_data["tariffPriceHome"]) * 100  # Convert to cents
+                Domoticz.Debug(f"Updating Home Tariff device (Unit {unit}) to: {value} cents")
+                update_device_value(unit, 0, str(value), Devices)
 
         if "tariffPriceLoadpoints" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "tariff", 1, "loadpoints", False, Devices)
             if unit is not None:
-                update_device_value(unit, 0, site_data["tariffPriceLoadpoints"], Devices)
+                value = float(site_data["tariffPriceLoadpoints"]) * 100  # Convert to cents
+                Domoticz.Debug(f"Updating Loadpoints Tariff device (Unit {unit}) to: {value} cents")
+                update_device_value(unit, 0, str(value), Devices)
 
         # Update grid current devices
         if "grid" in site_data and isinstance(site_data["grid"], dict) and "currents" in site_data["grid"]:
