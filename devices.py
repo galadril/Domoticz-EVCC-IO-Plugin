@@ -269,7 +269,6 @@ class DeviceManager:
         """Create Domoticz.Devices for a vehicle"""
         # Get the vehicle name, accounting for possible dictionary storage
         vehicle_name = None
-        """
         if vehicle_id in self.vehicles:
             if isinstance(self.vehicles[vehicle_id], dict) and "name" in self.vehicles[vehicle_id]:
                 vehicle_name = self.vehicles[vehicle_id]["name"]
@@ -290,50 +289,50 @@ class DeviceManager:
         if "original_id" in vehicle_data:
             external_id = vehicle_data["original_id"]
         
-        # Vehicle SoC
+        # Vehicle SoC - percentage sensor
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "vehicle", vehicle_id, "soc", True, Devices)
+                             "vehicle", vehicle_id, "soc", True, Devices)
         if unit not in Devices:
-            Domoticz.Log(f"Creating device '{vehicle_name} SoC'.")
-            Domoticz.Device(Unit=unit, Name=f"{vehicle_name} SoC", Type=243, Subtype=6, 
-                           Used=0, Description=f"vehicle_{vehicle_id}_soc", 
-                           DeviceID=external_id).Create()
+            Domoticz.Log(f"Creating device '{vehicle_name} SoC'")
+            Domoticz.Device(Unit=unit, Name=f"{vehicle_name} SoC", Type=243, Subtype=6,
+                          Description=f"vehicle_{vehicle_id}_soc", Used=0,
+                          DeviceID=external_id).Create()
             
-        # Vehicle range
+        # Vehicle range - Custom sensor with km unit
         if "range" in vehicle_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "vehicle", vehicle_id, "range", True, Devices)
+                                 "vehicle", vehicle_id, "range", True, Devices)
             if unit not in Devices:
-                Domoticz.Log(f"Creating device '{vehicle_name} Range'.")
-                Domoticz.Device(Unit=unit, Name=f"{vehicle_name} Range", Type=243, Subtype=31, 
-                               Used=0, Description=f"vehicle_{vehicle_id}_range", 
-                               DeviceID=external_id).Create()
+                Domoticz.Log(f"Creating device '{vehicle_name} Range'")
+                options = {'Custom': '1;km'}
+                Domoticz.Device(Unit=unit, Name=f"{vehicle_name} Range", Type=243, Subtype=31,
+                              Options=options, Description=f"vehicle_{vehicle_id}_range", Used=0,
+                              DeviceID=external_id).Create()
             
-        # Vehicle status
+        # Vehicle status - Selector switch
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "vehicle", vehicle_id, "status", True, Devices)
+                             "vehicle", vehicle_id, "status", True, Devices)
         if unit not in Devices:
-            Domoticz.Log(f"Creating device '{vehicle_name} Status'.")
+            Domoticz.Log(f"Creating device '{vehicle_name} Status'")
             Options = {"LevelActions": "||||",
                       "LevelNames": "Disconnected|Connected|Charging|Complete",
                       "LevelOffHidden": "false",
                       "SelectorStyle": "0"}
-            Domoticz.Device(Unit=unit, Name=f"{vehicle_name} Status", Type=244, Subtype=62, 
-                           Switchtype=18, Image=9, Options=Options, Used=0, 
-                           Description=f"vehicle_{vehicle_id}_status", 
-                           DeviceID=external_id).Create()
+            Domoticz.Device(Unit=unit, Name=f"{vehicle_name} Status", Type=244, Subtype=62,
+                          Switchtype=18, Image=9, Options=Options, Used=0,
+                          Description=f"vehicle_{vehicle_id}_status",
+                          DeviceID=external_id).Create()
         
-        # Vehicle odometer
+        # Vehicle odometer - Custom sensor with km unit
         if "vehicleOdometer" in vehicle_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                "vehicle", vehicle_id, "odometer", True, Devices)
+                                 "vehicle", vehicle_id, "odometer", True, Devices)
             if unit not in Devices:
                 options = {'Custom': '1;km'}
-                Domoticz.Log(f"Creating device '{vehicle_name} Odometer'.")
+                Domoticz.Log(f"Creating device '{vehicle_name} Odometer'")
                 Domoticz.Device(Unit=unit, Name=f"{vehicle_name} Odometer", Type=243, Subtype=31,
                               Options=options, Used=0, Description=f"vehicle_{vehicle_id}_odometer",
                               DeviceID=external_id).Create()
-        """
     
     def create_loadpoint_devices(self, loadpoint_id, loadpoint_data, Devices):
         """Create Domoticz.Devices for a loadpoint"""
@@ -525,7 +524,6 @@ class DeviceManager:
                 options = {'Custom': '1;%'}
                 Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Solar Percentage", Type=243, Subtype=6,
                               Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_session_solar_percentage").Create()
-        """
 
     def update_site_devices(self, site_data, Devices):
         """Update site Domoticz.Devices"""
