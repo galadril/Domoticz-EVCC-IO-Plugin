@@ -408,7 +408,14 @@ class BasePlugin:
                 vehicle_index = 1
                 for vehicle_id_str, vehicle_data in data["vehicles"].items():
                     if isinstance(vehicle_data, dict):
+                        # Get detailed vehicle status
+                        Domoticz.Debug(f"Getting detailed status for vehicle {vehicle_id_str}")
+                        vehicle_status = self.api.get_vehicle_status(vehicle_id_str)
+                        if vehicle_status:
+                            Domoticz.Debug(f"Vehicle status received: {json.dumps(vehicle_status)}")
+                            vehicle_data.update(vehicle_status)
                         self.device_manager.update_vehicle_devices(vehicle_index, vehicle_data, Devices)
+                            Domoticz.Debug(f"No status received for vehicle {vehicle_id_str}")
                         vehicle_index += 1
 
         except Exception as e:
@@ -443,11 +450,28 @@ class BasePlugin:
                     for i, vehicle in enumerate(vehicles):
                         vehicle_id = i + 1
                         if isinstance(vehicle, dict):
+                            # Get vehicle ID from DeviceID if available
+                            external_id = None
+                            for unit, device in Devices.items():
+                                if device.DeviceID and device.Description.startswith(f"vehicle_{vehicle_id}_"):
+                                    external_id = device.DeviceID
+                                    break
+                            if external_id:
+                                # Get detailed vehicle status
+                                vehicle_status = self.api.get_vehicle_status(external_id)
+                                if vehicle_status:
+                                    # Merge status with REST API data
+                                    vehicle.update(vehicle_status)
                             self.device_manager.update_vehicle_devices(vehicle_id, vehicle, Devices)
                 elif isinstance(vehicles, dict):
                     vehicle_index = 1
                     for vehicle_id_str, vehicle in vehicles.items():
                         if isinstance(vehicle, dict):
+                            # Get detailed vehicle status
+                            vehicle_status = self.api.get_vehicle_status(vehicle_id_str)
+                            if vehicle_status:
+                                # Merge status with REST API data
+                                vehicle.update(vehicle_status)
                             self.device_manager.update_vehicle_devices(vehicle_index, vehicle, Devices)
                             vehicle_index += 1
 
