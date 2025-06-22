@@ -46,6 +46,8 @@ class EVCCApi:
         self.ws_keep_connection = False  # Whether to keep WebSocket connection open
         self.last_complete_update = 0
         self.min_complete_update_interval = 5  # Minimum seconds between complete updates
+        self.update_in_progress = False  # Flag to prevent simultaneous update operations
+        self.last_data_update = 0  # Track when the ws_last_data was last updated
         
     def login(self):
         """Login to EVCC API if password is provided"""
@@ -143,42 +145,57 @@ class EVCCApi:
                     complete_state_indicators = {"pvPower", "grid", "homePower", "loadpoints.0"}
                     is_complete_state = False
                     
-                    if isinstance(data, dict):
-                        present_indicators = complete_state_indicators.intersection(data.keys())
-                        is_complete_state = len(present_indicators) >= 2  # Consider complete if 2+ indicators present
-                        
-                        if is_complete_state and (current_time - self.last_complete_update) >= self.min_complete_update_interval:
-                            self.last_complete_update = current_time
-                            self.ws_last_data = data.copy()  # Store complete state
-                            self.ws_temp_data = {}  # Clear temporary data
-                            self.received_complete_state = True
+                    # Avoid updating data while another update is in progress
+                    if self.update_in_progress:
+                        Domoticz.Debug("Update in progress, deferring WebSocket message processing")
+                        return
+                    
+                    # Set update in progress flag
+                    self.update_in_progress = True
+                    
+                    try:
+                        if isinstance(data, dict):
+                            present_indicators = complete_state_indicators.intersection(data.keys())
+                            is_complete_state = len(present_indicators) >= 2  # Consider complete if 2+ indicators present
                             
-                            # Log complete state as a single line
-                            Domoticz.Debug(f"Complete state: {json.dumps(self.ws_last_data)}")
-                            
-                            # Handle one-time connection mode
-                            if not self.ws_keep_connection:
-                                Domoticz.Log("Received complete state, closing one-time WebSocket connection")
-                                threading.Timer(2.0, self.close_websocket).start()
-                        else:
-                            # Handle partial update
-                            # Store in temporary buffer first
-                            self.ws_temp_data.update(data)
-                            
-                            # Only merge temp data periodically to avoid excessive updates
-                            if self.ws_last_data and (current_time - self.last_complete_update) >= 2:
-                                # Merge temporary data into last complete state
-                                merged_data = self.ws_last_data.copy()
-                                merged_data.update(self.ws_temp_data)
-                                self.ws_last_data = merged_data
-                                self.ws_temp_data = {}  # Clear temporary buffer
+                            if is_complete_state and (current_time - self.last_complete_update) >= self.min_complete_update_interval:
+                                self.last_complete_update = current_time
+                                self.ws_last_data = data.copy()  # Store complete state
+                                self.ws_temp_data = {}  # Clear temporary data
+                                self.received_complete_state = True
+                                self.last_data_update = current_time
                                 
-                                if (current_time - self.ws_last_log_time) > self.ws_log_interval:
-                                    self.ws_last_log_time = current_time
-                                    # Log merged updates as a single line
-                                    Domoticz.Debug(f"Merged updates: {json.dumps(merged_data)}")
+                                # Log complete state as a single line
+                                Domoticz.Debug(f"Complete state: {json.dumps(self.ws_last_data)}")
+                                
+                                # Handle one-time connection mode
+                                if not self.ws_keep_connection:
+                                    Domoticz.Log("Received complete state, closing one-time WebSocket connection")
+                                    threading.Timer(2.0, self.close_websocket).start()
+                            else:
+                                # Handle partial update
+                                # Store in temporary buffer first
+                                self.ws_temp_data.update(data)
+                                
+                                # Only merge temp data periodically to avoid excessive updates
+                                if self.ws_last_data and (current_time - self.last_data_update) >= 1:
+                                    # Merge temporary data into last complete state
+                                    merged_data = self.ws_last_data.copy()
+                                    merged_data.update(self.ws_temp_data)
+                                    self.ws_last_data = merged_data
+                                    self.ws_temp_data = {}  # Clear temporary buffer
+                                    self.last_data_update = current_time
+                                    
+                                    if (current_time - self.ws_last_log_time) > self.ws_log_interval:
+                                        self.ws_last_log_time = current_time
+                                        # Log merged updates as a single line
+                                        Domoticz.Debug(f"Merged updates: {json.dumps(merged_data)}")
+                    finally:
+                        # Always clear update in progress flag
+                        self.update_in_progress = False
                     
                 except Exception as e:
+                    self.update_in_progress = False  # Make sure flag is cleared
                     Domoticz.Error(f"Error parsing WebSocket data: {str(e)}\nRaw message: {message}")
             
             def on_error(ws, error):
@@ -201,6 +218,8 @@ class EVCCApi:
                 self.ws_last_data = {}  # Reset data on new connection
                 self.ws_temp_data = {}  # Reset temporary data
                 self.last_complete_update = 0  # Reset update timestamp
+                self.last_data_update = 0
+                self.update_in_progress = False
                 Domoticz.Log("WebSocket connection established")
             
             # Create WebSocket instance
@@ -250,6 +269,7 @@ class EVCCApi:
                 # Ensure WebSocket instance is cleared
                 self.ws = None
                 self.ws_connected = False
+                self.update_in_progress = False
             
             # Start a new thread only if we don't already have one
             if not self.ws_thread or not self.ws_thread.is_alive():
@@ -280,16 +300,24 @@ class EVCCApi:
                 # Store reference to current WebSocket
                 ws = self.ws
                 
-                # Wait for close to complete
-                start_time = time.time()
-                while hasattr(self.ws, 'sock') and self.ws.sock and time.time() - start_time < 5:
-                    time.sleep(0.1)
+                # Check if connection is currently open
+                try:
+                    if hasattr(ws, 'sock') and ws.sock:
+                        ws.close()
+                        # Wait for close to complete
+                        start_time = time.time()
+                        while hasattr(self.ws, 'sock') and self.ws.sock and time.time() - start_time < 5:
+                            time.sleep(0.1)
+                except:
+                    pass  # If any error occurs during close, continue to clearing
                 
                 # Clear the websocket instance
                 self.ws = None
+                self.update_in_progress = False
                 Domoticz.Log("WebSocket connection closed")
                 
             except Exception as e:
+                self.update_in_progress = False
                 Domoticz.Error(f"Error closing WebSocket: {str(e)}")
     
     def get_state(self, use_websocket=True, keep_connection=False):

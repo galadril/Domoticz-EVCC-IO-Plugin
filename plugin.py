@@ -1,5 +1,5 @@
 """
-<plugin key="Domoticz-EVCC-IO-Plugin" name="Domoticz EVCC IO Plugin" author="Mark Heinis" version="0.0.3" wikilink="https://github.com/galadril/Domoticz-EVCC-IO-Plugin/wiki" externallink="https://github.com/galadril/Domoticz-EVCC-IO-Plugin">
+<plugin key="Domoticz-EVCC-IO-Plugin" name="Domoticz EVCC IO Plugin" author="Mark Heinis" version="0.0.4" wikilink="https://github.com/galadril/Domoticz-EVCC-IO-Plugin/wiki" externallink="https://github.com/galadril/Domoticz-EVCC-IO-Plugin">
     <description>
         Plugin for retrieving and updating EV charging data from EVCC.IO API.
     </description>
@@ -48,6 +48,7 @@ class BasePlugin:
         self.last_websocket_update = 0
         self.last_device_update = 0
         self.last_data = None
+        self.last_data_hash = None  # Track data hash to detect real changes
         self.min_websocket_update_interval = 5  # Minimum seconds between updates
         self.ws_initialized = False  # Track if WebSocket has been initialized
         self.ws_retry_count = 0
@@ -55,6 +56,7 @@ class BasePlugin:
         self.last_ws_reconnect = 0  # Track last websocket reconnection time
         self.ws_reconnect_interval = 60  # Force reconnect every 60 seconds
         self.plugin_path = os.path.dirname(os.path.realpath(__file__))
+        self.update_in_progress = False  # Flag to prevent multiple concurrent updates
         
     def _install_custom_page(self):
         """Install the custom EVCC dashboard page"""
@@ -166,52 +168,73 @@ class BasePlugin:
     def onHeartbeat(self):
         current_time = time.time()
         
-        # For WebSocket mode, check if we have new data available
-        if self.use_websocket:
-            # Force reconnect every 60 seconds
-            if (current_time - self.last_ws_reconnect >= self.ws_reconnect_interval):
-                Domoticz.Log("Forcing WebSocket reconnection after 60 seconds")
-                self._initialize_websocket()  # This will handle closing and reconnecting
-                return  # Skip this heartbeat cycle to allow connection to establish
+        # Skip this update if already in progress
+        if self.update_in_progress:
+            Domoticz.Debug("Update already in progress, skipping this heartbeat")
+            return
             
-            # Check WebSocket connection and try to reconnect if needed
-            if not self.api.ws_connected:
-                if self.ws_retry_count < self.max_ws_retries:
-                    if not self._initialize_websocket():
-                        # If reconnection fails, try again next heartbeat
-                        return
-                else:
-                    # If we've exceeded retry attempts, fall back to REST API
-                    self.use_websocket = False
-                    self.update_devices_rest()
-                    return
+        self.update_in_progress = True
+        
+        try:
+            # For WebSocket mode, check if we have new data available
+            if self.use_websocket:
+                # Force reconnect periodically
+                if (current_time - self.last_ws_reconnect >= self.ws_reconnect_interval):
+                    Domoticz.Log("Forcing WebSocket reconnection after reconnect interval")
+                    self._initialize_websocket()  # This will handle closing and reconnecting
+                    self.update_in_progress = False
+                    return  # Skip this heartbeat cycle to allow connection to establish
                 
-            # Check if we have new WebSocket data
-            if self.api.ws_connected and self.api.ws_last_data:
-                # Only update if we have new data and enough time has passed
-                if (self.api.ws_last_data != self.last_data and 
-                    current_time - self.last_websocket_update >= self.min_websocket_update_interval):
-                    # Update data and process changes
-                    self.last_data = self.api.ws_last_data.copy()  # Make a copy to detect future changes
-                    self.last_websocket_update = current_time
-                    self.update_devices()
-                    self.ws_retry_count = 0  # Reset retry count on successful update
-        else:
-            # For REST API mode, use the standard interval
-            self.run_again -= 1
-            if self.run_again <= 0:
-                self.run_again = self.update_interval / 10  # Set for next update interval
-                self.update_devices_rest()
+                # Check WebSocket connection and try to reconnect if needed
+                if not self.api.ws_connected:
+                    if self.ws_retry_count < self.max_ws_retries:
+                        if not self._initialize_websocket():
+                            # If reconnection fails, try again next heartbeat
+                            self.update_in_progress = False
+                            return
+                    else:
+                        # If we've exceeded retry attempts, fall back to REST API
+                        self.use_websocket = False
+                        self.update_devices_rest()
+                        self.update_in_progress = False
+                        return
+                    
+                # Check if we have new WebSocket data
+                if self.api.ws_connected and self.api.ws_last_data:
+                    # Calculate a hash of the current data to check for real changes
+                    current_hash = hash(json.dumps(self.api.ws_last_data, sort_keys=True))
+                    
+                    # Only update if we have new data and enough time has passed
+                    if ((current_hash != self.last_data_hash) and 
+                        (current_time - self.last_websocket_update >= self.min_websocket_update_interval)):
+                        # Update data and process changes
+                        self.last_data = self.api.ws_last_data.copy()  # Make a copy to detect future changes
+                        self.last_data_hash = current_hash
+                        self.last_websocket_update = current_time
+                        Domoticz.Debug("WebSocket data changed, updating devices")
+                        self.update_devices()
+                        self.ws_retry_count = 0  # Reset retry count on successful update
+            else:
+                # For REST API mode, use the standard interval
+                self.run_again -= 1
+                if self.run_again <= 0:
+                    self.run_again = self.update_interval / 10  # Set for next update interval
+                    self.update_devices_rest()
+        finally:
+            self.update_in_progress = False
     
     def update_devices_rest(self):
         """Update devices using REST API"""
         try:
+            Domoticz.Debug("Updating devices using REST API")
             state = self.api.get_state()
             if state:
                 self.last_data = state
                 self._update_devices_from_rest_api_data(state)
+                self.last_device_update = time.time()
         except Exception as e:
             Domoticz.Error(f"Error updating devices via REST API: {str(e)}")
+            Domoticz.Error(traceback.format_exc())
 
     def update_devices(self):
         """Update devices with current data"""
@@ -221,6 +244,10 @@ class BasePlugin:
         try:
             # Check for loadpoint structure that's common in WebSocket format
             has_loadpoint_prefix = any(key.startswith("loadpoints.") for key in self.last_data)
+            
+            current_time = time.time()
+            Domoticz.Debug(f"Updating devices (last update: {int(current_time - self.last_device_update)}s ago)")
+            self.last_device_update = current_time
                 
             if has_loadpoint_prefix:
                 # This is a flat structure from WebSocket
@@ -231,6 +258,7 @@ class BasePlugin:
                     
         except Exception as e:
             Domoticz.Error(f"Error updating devices: {str(e)}")
+            Domoticz.Error(traceback.format_exc())
     
     def _get_initial_state(self):
         """Fetch initial state to discover devices"""
@@ -253,6 +281,7 @@ class BasePlugin:
             
         except Exception as e:
             Domoticz.Error(f"Error getting initial state: {str(e)}")
+            Domoticz.Error(traceback.format_exc())
     
     def _process_websocket_data(self, data):
         """Process flat data structure from WebSocket format"""
@@ -402,6 +431,9 @@ class BasePlugin:
                         battery_data["title"] = "Battery"
                         site_data["battery"].append(battery_data)
             
+            # Log the data we're about to use for updating
+            Domoticz.Debug(f"Updating site devices with data: {json.dumps(site_data)[:200]}...")
+            
             # Update site devices including PV and battery
             if site_data:
                 self.device_manager.update_site_devices(site_data, Devices)
@@ -423,6 +455,10 @@ class BasePlugin:
                     if key.startswith(prefix)
                 }
                 
+                # Skip empty data
+                if not loadpoint_data:
+                    continue
+                    
                 # Update loadpoint with numeric ID
                 loadpoint_id = idx + 1
                 
@@ -439,6 +475,7 @@ class BasePlugin:
                 if "chargePower" not in loadpoint_data and "chargePower" in site_data:
                     loadpoint_data["chargePower"] = site_data["chargePower"]
                 
+                Domoticz.Debug(f"Updating loadpoint {loadpoint_id} with data: {json.dumps(loadpoint_data)[:200]}...")
                 self.device_manager.update_loadpoint_devices(loadpoint_id, loadpoint_data, Devices)
 
             # Process vehicle data
@@ -457,6 +494,8 @@ class BasePlugin:
                             # Merge status with websocket data
                             vehicle_data.update(vehicle_status)
                             Domoticz.Debug(f"Updated vehicle data: {json.dumps(vehicle_data)}")
+                        
+                        Domoticz.Debug(f"Updating vehicle {vehicle_index} with data: {json.dumps(vehicle_data)[:200]}...")
                         self.device_manager.update_vehicle_devices(vehicle_index, vehicle_data, Devices)
                         vehicle_index += 1
 
@@ -520,6 +559,7 @@ class BasePlugin:
 
         except Exception as e:
             Domoticz.Error(f"Error updating devices from REST API data: {str(e)}")
+            Domoticz.Error(traceback.format_exc())
 
     def onCommand(self, Unit, Command, Level, Hue):
         """Handle commands sent to devices"""
@@ -605,6 +645,7 @@ class BasePlugin:
                 
         except Exception as e:
             Domoticz.Error(f"Error handling command: {str(e)}")
+            Domoticz.Error(traceback.format_exc())
 
 # Global plugin instance
 _plugin = BasePlugin()
