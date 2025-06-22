@@ -413,6 +413,21 @@ class BasePlugin:
                         vehicle_status = self.api.get_vehicle_status(vehicle_id_str)
                         if vehicle_status:
                             Domoticz.Debug(f"Vehicle status received: {json.dumps(vehicle_status)}")
+                            # Map charge status to selector switch values
+                            if "chargeStatus" in vehicle_status:
+                                status = vehicle_status["chargeStatus"]
+                                if status == "A":  # Connected
+                                    vehicle_status["status"] = "A"
+                                elif status == "B":  # Charging
+                                    vehicle_status["status"] = "B"
+                                elif status == "C":  # Complete
+                                    vehicle_status["status"] = "C"
+                                elif status == "D":  # Error
+                                    vehicle_status["status"] = "D"
+                                elif status == "E":  # Disabled
+                                    vehicle_status["status"] = "E"
+                                elif status == "F":  # Missing
+                                    vehicle_status["status"] = "F"
                             # Merge status with websocket data
                             vehicle_data.update(vehicle_status)
                             Domoticz.Debug(f"Updated vehicle data: {json.dumps(vehicle_data)}")

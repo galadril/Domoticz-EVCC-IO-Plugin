@@ -309,8 +309,8 @@ class DeviceManager:
                              "vehicle", vehicle_id, "status", True, Devices)
         if unit not in Devices:
             Domoticz.Log(f"Creating device '{vehicle_name} Status'")
-            Options = {"LevelActions": "||||",
-                      "LevelNames": "Disconnected|Connected|Charging|Complete",
+            Options = {"LevelActions": "||||||",
+                      "LevelNames": "Disconnected|Connected|Charging|Complete|Error|Disabled",
                       "LevelOffHidden": "false",
                       "SelectorStyle": "0"}
             Domoticz.Device(Unit=unit, Name=f"{vehicle_name} Status", Type=244, Subtype=62,
@@ -656,10 +656,13 @@ class DeviceManager:
                                   "vehicle", vehicle_id, "status", False, Devices)
             if unit is not None:
                 status = vehicle_data["status"]
-                status_value = 0  # disconnected
-                if status == "A": status_value = 10  # connected
-                elif status == "B": status_value = 20  # charging
-                elif status == "C": status_value = 30  # complete
+                # Map status codes to selector switch values
+                status_value = 0  # Disconnected (F)
+                if status == "A": status_value = 10    # Connected
+                elif status == "B": status_value = 20  # Charging
+                elif status == "C": status_value = 30  # Complete
+                elif status == "D": status_value = 40  # Error
+                elif status == "E": status_value = 50  # Disabled
                 update_device_value(unit, status_value, 0, Devices)
         
         # Update odometer
@@ -668,6 +671,18 @@ class DeviceManager:
                                 "vehicle", vehicle_id, "odometer", False, Devices)
             if unit is not None:
                 update_device_value(unit, 0, vehicle_data["vehicleOdometer"], Devices)
+        elif "odometer" in vehicle_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "vehicle", vehicle_id, "odometer", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, vehicle_data["odometer"], Devices)
+
+        # Update vehicle limit
+        if "vehicleLimitSoc" in vehicle_data:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                "vehicle", vehicle_id, "limit_soc", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, vehicle_data["vehicleLimitSoc"], Devices)
     
     def update_loadpoint_devices(self, loadpoint_id, loadpoint_data, Devices):
         """Update loadpoint Domoticz.Devices"""
