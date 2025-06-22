@@ -336,8 +336,6 @@ class DeviceManager:
     
     def create_loadpoint_devices(self, loadpoint_id, loadpoint_data, Devices):
         """Create Domoticz.Devices for a loadpoint"""
-        # Get the loadpoint name, accounting for possible dictionary storage
-        """
         loadpoint_name = None
         if loadpoint_id in self.loadpoints:
             if isinstance(self.loadpoints[loadpoint_id], dict) and "name" in self.loadpoints[loadpoint_id]:
@@ -361,170 +359,105 @@ class DeviceManager:
         
         # Charging power - only instant power
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "loadpoint", loadpoint_id, "charging_power", True, Devices)
+                            "loadpoint", loadpoint_id, "charging_power", True, Devices)
         if unit not in Devices:
-            Domoticz.Log(f"Creating device '{loadpoint_name} Charging Power'.")
-            Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Power", TypeName='Usage',
-                          Description=f"loadpoint_{loadpoint_id}_charging_power").Create()
+            Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Power", Type=248, Subtype=1,
+                          Description=f"loadpoint_{loadpoint_id}_charging_power", Used=0).Create()
         
         # Charged energy - cumulative energy device
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "loadpoint", loadpoint_id, "charged_energy", True, Devices)
+                            "loadpoint", loadpoint_id, "charged_energy", True, Devices)
         if unit not in Devices:
-            Domoticz.Log(f"Creating device '{loadpoint_name} Charged Energy'.")
-            Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charged Energy", TypeName='kWh',
-                          Description=f"loadpoint_{loadpoint_id}_charged_energy").Create()
+            # For energy meter, use Type=243 (P1 Smart Meter) with Subtype=29 (Electric)
+            Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charged Energy", Type=243, Subtype=29,
+                          Description=f"loadpoint_{loadpoint_id}_charged_energy", Used=0).Create()
             
         # Charging mode selector
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "loadpoint", loadpoint_id, "mode", True, Devices)
+                            "loadpoint", loadpoint_id, "mode", True, Devices)
         if unit not in Devices:
-            Domoticz.Log(f"Creating device '{loadpoint_name} Charging Mode'.")
             Options = {"LevelActions": "||||",
                       "LevelNames": "Off|Now|Min+PV|PV",
                       "LevelOffHidden": "false",
                       "SelectorStyle": "0"}
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Mode", Type=244, Subtype=62, 
-                           Switchtype=18, Image=9, Options=Options, Used=0, 
-                           Description=f"loadpoint_{loadpoint_id}_mode", 
-                           DeviceID=external_id).Create()
-            
-        # Phases selector  
+                          Switchtype=18, Image=9, Options=Options, Used=0, 
+                          Description=f"loadpoint_{loadpoint_id}_mode", 
+                          DeviceID=external_id).Create()
+        
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "loadpoint", loadpoint_id, "phases", True, Devices)
+                            "loadpoint", loadpoint_id, "phases", True, Devices)
         if unit not in Devices:
-            Domoticz.Log(f"Creating device '{loadpoint_name} Charging Phases'.")
             Options = {"LevelActions": "|||",
                       "LevelNames": "Auto|1-Phase|3-Phase",
                       "LevelOffHidden": "false",
                       "SelectorStyle": "0"}
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Phases", Type=244, Subtype=62, 
-                           Switchtype=18, Image=9, Options=Options, Used=0, 
-                           Description=f"loadpoint_{loadpoint_id}_phases", 
-                           DeviceID=external_id).Create()
+                          Switchtype=18, Image=9, Options=Options, Used=0, 
+                          Description=f"loadpoint_{loadpoint_id}_phases", 
+                          DeviceID=external_id).Create()
             
         # Min SoC percentage if applicable
         if "minSoc" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "loadpoint", loadpoint_id, "min_soc", True, Devices)
+                                "loadpoint", loadpoint_id, "min_soc", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;%'}  # Define custom options for percentage sensor
-                Domoticz.Log(f"Creating device '{loadpoint_name} Min SoC'.")
+                options = {'Custom': '1;%'}
                 Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Min SoC", Type=243, Subtype=6, 
-                               Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_min_soc", 
-                               DeviceID=external_id).Create()
+                            Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_min_soc", 
+                            DeviceID=external_id).Create()
             
         # Target SoC percentage if applicable
         if "targetSoc" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "loadpoint", loadpoint_id, "target_soc", True, Devices)
+                                "loadpoint", loadpoint_id, "target_soc", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;%'}  # Define custom options for percentage sensor
-                Domoticz.Log(f"Creating device '{loadpoint_name} Target SoC'.")
+                options = {'Custom': '1;%'}
                 Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Target SoC", Type=243, Subtype=6, 
-                               Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_target_soc", 
-                               DeviceID=external_id).Create()
+                            Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_target_soc", 
+                            DeviceID=external_id).Create()
         
-        # Charging timer (minutes)
+        # Charging timer
         unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                              "loadpoint", loadpoint_id, "charging_timer", True, Devices)
+                            "loadpoint", loadpoint_id, "charging_timer", True, Devices)
         if unit not in Devices:
-            options = {'Custom': '1;minutes'}  # Define custom options for time sensor
-            Domoticz.Log(f"Creating device '{loadpoint_name} Charging Timer'.")
+            options = {'Custom': '1;minutes'}
             Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charging Timer", Type=243, Subtype=8, 
-                           Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_charging_timer", 
-                           DeviceID=external_id).Create()
-        
-        # Current limits
-        if "effectiveMinCurrent" in loadpoint_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                "loadpoint", loadpoint_id, "min_current", True, Devices)
-            if unit not in Devices:
-                options = {'Custom': '1;A'}
-                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Min Current", Type=243, Subtype=23,
-                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_min_current").Create()
-
-        if "maxCurrent" in loadpoint_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                "loadpoint", loadpoint_id, "max_current", True, Devices)
-            if unit not in Devices:
-                options = {'Custom': '1;A'}
-                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Max Current", Type=243, Subtype=23,
-                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_max_current").Create()
-
-        if "effectiveMaxCurrent" in loadpoint_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                "loadpoint", loadpoint_id, "effective_max_current", True, Devices)
-            if unit not in Devices:
-                options = {'Custom': '1;A'}
-                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Effective Max Current", Type=243, Subtype=23,
-                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_effective_max_current").Create()
-
-        # Timing devices
-        if "enableDelay" in loadpoint_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                "loadpoint", loadpoint_id, "enable_delay", True, Devices)
-            if unit not in Devices:
-                options = {'Custom': '1;s'}
-                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Enable Delay", Type=243, Subtype=8,
-                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_enable_delay").Create()
-
-        if "disableDelay" in loadpoint_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                "loadpoint", loadpoint_id, "disable_delay", True, Devices)
-            if unit not in Devices:
-                options = {'Custom': '1;s'}
-                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Disable Delay", Type=243, Subtype=8,
-                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_disable_delay").Create()
-
-        if "chargeDuration" in loadpoint_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                "loadpoint", loadpoint_id, "charge_duration", True, Devices)
-            if unit not in Devices:
-                options = {'Custom': '1;s'}
-                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Charge Duration", Type=243, Subtype=8,
-                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_charge_duration").Create()
-
-        if "connectedDuration" in loadpoint_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                "loadpoint", loadpoint_id, "connected_duration", True, Devices)
-            if unit not in Devices:
-                options = {'Custom': '1;s'}
-                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Connected Duration", Type=243, Subtype=8,
-                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_connected_duration").Create()
-        
+                          Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_charging_timer", 
+                          DeviceID=external_id).Create()
+            
         # Create session statistics devices
         if "sessionEnergy" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                 "loadpoint", loadpoint_id, "session_energy", True, Devices)
+                                "loadpoint", loadpoint_id, "session_energy", True, Devices)
             if unit not in Devices:
-                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Energy", TypeName='kWh',
-                              Description=f"loadpoint_{loadpoint_id}_session_energy").Create()
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Energy", Type=243, Subtype=29,
+                            Description=f"loadpoint_{loadpoint_id}_session_energy", Used=0).Create()
 
         if "sessionPrice" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                 "loadpoint", loadpoint_id, "session_price", True, Devices)
+                                "loadpoint", loadpoint_id, "session_price", True, Devices)
             if unit not in Devices:
                 options = {'Custom': '1;EUR'}
-                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Price", Type=243, Subtype=1,
-                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_session_price").Create()
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Price", Type=243, Subtype=31,
+                            Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_session_price").Create()
 
         if "sessionPricePerKWh" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                 "loadpoint", loadpoint_id, "session_price_per_kwh", True, Devices)
+                                "loadpoint", loadpoint_id, "session_price_per_kwh", True, Devices)
             if unit not in Devices:
                 options = {'Custom': '1;EUR/kWh'}
-                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Price per kWh", Type=243, Subtype=1,
-                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_session_price_per_kwh").Create()
+                Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Price per KWh", Type=243, Subtype=31,
+                            Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_session_price_per_kwh").Create()
 
         if "sessionSolarPercentage" in loadpoint_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                 "loadpoint", loadpoint_id, "session_solar_percentage", True, Devices)
+                                "loadpoint", loadpoint_id, "session_solar_percentage", True, Devices)
             if unit not in Devices:
                 options = {'Custom': '1;%'}
                 Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Solar Percentage", Type=243, Subtype=6,
-                              Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_session_solar_percentage").Create()
-
+                            Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_session_solar_percentage").Create()
+    
     def update_site_devices(self, site_data, Devices):
         """Update site Domoticz.Devices"""
         # Grid power - handle both formats (direct or nested in grid object)
