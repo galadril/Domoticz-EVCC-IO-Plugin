@@ -109,8 +109,9 @@ class EVCCApi:
             return False
             
         # Ensure any existing connection is closed first
-        if self.ws is not None:
-            self.close_websocket()
+        self.close_websocket()
+        # Small delay to ensure socket is fully closed
+        time.sleep(0.5)
             
         try:
             # Create WebSocket connection
@@ -184,6 +185,7 @@ class EVCCApi:
                 self.ws_error = str(error)
                 Domoticz.Error(f"WebSocket error: {self.ws_error}")
                 self.ws_connected = False
+                self.ws = None  # Clear the WebSocket instance on error
                 
             def on_close(ws, close_status_code, close_msg):
                 self.ws_connected = False
@@ -191,6 +193,7 @@ class EVCCApi:
                     Domoticz.Log(f"WebSocket connection closed: {close_status_code} - {close_msg}")
                 else:
                     Domoticz.Log("WebSocket connection closed")
+                self.ws = None  # Clear the WebSocket instance on close
                 
             def on_open(ws):
                 self.ws_connected = True
@@ -201,7 +204,7 @@ class EVCCApi:
                 Domoticz.Log("WebSocket connection established")
             
             # Create WebSocket instance
-            self.ws = websocket.WebSocketApp(
+            ws = websocket.WebSocketApp(
                 self.ws_url,
                 header=headers,
                 on_open=on_open,
@@ -210,17 +213,25 @@ class EVCCApi:
                 on_close=on_close
             )
             
+            # Store the WebSocket instance
+            self.ws = ws
+            
             # Start WebSocket in a separate thread
             def run_websocket():
                 while True:
                     try:
+                        # Check if WebSocket instance is still valid
+                        if not self.ws:
+                            Domoticz.Log("WebSocket instance no longer exists")
+                            break
+                            
                         self.ws.run_forever()
                         
                         # Exit conditions
                         if not self.ws_keep_connection:
                             Domoticz.Log("WebSocket connection not being kept alive")
                             break
-                        if not hasattr(self, 'ws') or self.ws is None:
+                        if not self.ws:
                             Domoticz.Log("WebSocket instance has been cleared")
                             break
                             
@@ -236,10 +247,15 @@ class EVCCApi:
                         time.sleep(5)  # Wait before retry
                         
                 Domoticz.Log("WebSocket thread ending")
+                # Ensure WebSocket instance is cleared
+                self.ws = None
+                self.ws_connected = False
             
-            self.ws_thread = threading.Thread(target=run_websocket)
-            self.ws_thread.daemon = True
-            self.ws_thread.start()
+            # Start a new thread only if we don't already have one
+            if not self.ws_thread or not self.ws_thread.is_alive():
+                self.ws_thread = threading.Thread(target=run_websocket)
+                self.ws_thread.daemon = True
+                self.ws_thread.start()
             
             # Wait for connection to establish
             timeout = 10
@@ -261,8 +277,8 @@ class EVCCApi:
                 self.ws_connected = False
                 self.ws_keep_connection = False
                 
-                # Close the connection
-                self.ws.close()
+                # Store reference to current WebSocket
+                ws = self.ws
                 
                 # Wait for close to complete
                 start_time = time.time()
