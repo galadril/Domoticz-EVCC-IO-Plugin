@@ -8,6 +8,7 @@ Author: Mark Heinis
 import Domoticz
 from helpers import get_device_unit, update_device_value, format_device_name
 import re
+import json
 
 class DeviceManager:
     """Class for handling device creation and updates"""
@@ -323,8 +324,8 @@ class DeviceManager:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "vehicle", vehicle_id, "odometer", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;km'}
                 Domoticz.Log(f"Creating device '{vehicle_name} Odometer'")
+                options = {'Custom': '1;km'}
                 Domoticz.Device(Unit=unit, Name=f"{vehicle_name} Odometer", Type=243, Subtype=31,
                               Options=options, Used=0, Description=f"vehicle_{vehicle_id}_odometer",
                               DeviceID=external_id).Create()
@@ -636,6 +637,8 @@ class DeviceManager:
     
     def update_vehicle_devices(self, vehicle_id, vehicle_data, Devices):
         """Update vehicle Domoticz.Devices"""
+        Domoticz.Debug(f"Updating vehicle {vehicle_id} with data: {json.dumps(vehicle_data)}")
+        
         # Vehicle SoC
         if "soc" in vehicle_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
@@ -650,22 +653,29 @@ class DeviceManager:
             if unit is not None:
                 update_device_value(unit, 0, vehicle_data["range"], Devices)
         
-        # Vehicle status
-        if "status" in vehicle_data:
+        # Vehicle status - either from direct status or chargeStatus
+        if "status" in vehicle_data or "chargeStatus" in vehicle_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                   "vehicle", vehicle_id, "status", False, Devices)
             if unit is not None:
-                status = vehicle_data["status"]
-                # Map status codes to selector switch values
+                # Get status from either field
+                status = vehicle_data.get("status", vehicle_data.get("chargeStatus", "F"))
                 status_value = 0  # Disconnected (F)
+                
+                Domoticz.Debug(f"Setting vehicle {vehicle_id} status to: {status}")
+                
+                # Map status codes to selector switch values
                 if status == "A": status_value = 10    # Connected
                 elif status == "B": status_value = 20  # Charging
                 elif status == "C": status_value = 30  # Complete
                 elif status == "D": status_value = 40  # Error
                 elif status == "E": status_value = 50  # Disabled
+                elif status == "F": status_value = 0   # Disconnected
+                
+                Domoticz.Debug(f"Vehicle {vehicle_id} status value mapped to: {status_value}")
                 update_device_value(unit, status_value, 0, Devices)
         
-        # Update odometer
+        # Update odometer - check both possible field names
         if "vehicleOdometer" in vehicle_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                 "vehicle", vehicle_id, "odometer", False, Devices)
