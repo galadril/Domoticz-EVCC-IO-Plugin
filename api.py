@@ -435,3 +435,30 @@ class EVCCApi:
         except Exception as e:
             Domoticz.Error(f"Error setting battery mode: {str(e)}")
             return False
+
+    def get_vehicle_status(self, vehicle_id):
+        """Get detailed status for a specific vehicle"""
+        try:
+            cookies = self.get_cookies()
+            response = requests.get(
+                f"{self.base_url}/config/devices/vehicle/{vehicle_id}/status",
+                cookies=cookies
+            )
+            
+            if response.status_code != 200:
+                Domoticz.Error(f"Failed to get vehicle status: {response.status_code}")
+                return None
+
+            data = response.json()
+            if "result" in data:
+                # Extract values from result
+                result = {}
+                for key, item in data["result"].items():
+                    if isinstance(item, dict) and "value" in item:
+                        result[key] = item["value"]
+                return result
+            return None
+                
+        except Exception as e:
+            Domoticz.Error(f"Error getting vehicle status: {str(e)}")
+            return None

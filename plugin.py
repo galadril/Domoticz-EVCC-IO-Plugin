@@ -109,6 +109,8 @@ class BasePlugin:
         
         # Initialize device manager
         self.device_manager = DeviceManager()
+        # Share API instance with device manager
+        self.device_manager.api = self.api
         
         # Load existing device mappings with Devices object
         self.device_manager._load_device_mapping(Devices)
