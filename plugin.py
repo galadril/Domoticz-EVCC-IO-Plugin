@@ -413,9 +413,12 @@ class BasePlugin:
                         vehicle_status = self.api.get_vehicle_status(vehicle_id_str)
                         if vehicle_status:
                             Domoticz.Debug(f"Vehicle status received: {json.dumps(vehicle_status)}")
+                            # Merge status with websocket data
                             vehicle_data.update(vehicle_status)
-                        self.device_manager.update_vehicle_devices(vehicle_index, vehicle_data, Devices)
+                            Domoticz.Debug(f"Updated vehicle data: {json.dumps(vehicle_data)}")
+                        else:
                             Domoticz.Debug(f"No status received for vehicle {vehicle_id_str}")
+                        self.device_manager.update_vehicle_devices(vehicle_index, vehicle_data, Devices)
                         vehicle_index += 1
 
         except Exception as e:
