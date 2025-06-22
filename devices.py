@@ -105,7 +105,7 @@ class DeviceManager:
                                  "site", 1, "grid_power", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Name="Grid Power", Unit=unit, Type=248, Subtype=1,
-                              Description="site_1_grid_power", Used=1).Create()
+                              Description="site_1_grid_power", Used=0).Create()
         
         # Home power - only instant power
         if "homePower" in site_data:
@@ -113,7 +113,7 @@ class DeviceManager:
                                  "site", 1, "home_power", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Name="Home Power", Unit=unit, Type=248, Subtype=1,
-                              Description="site_1_home_power", Used=1).Create()
+                              Description="site_1_home_power", Used=0).Create()
                 
         # PV power - only instant power
         if "pvPower" in site_data:
@@ -121,7 +121,7 @@ class DeviceManager:
                                  "site", 1, "pv_power", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Name="PV Power", Unit=unit, Type=248, Subtype=1,
-                              Description="site_1_pv_power", Used=1).Create()
+                              Description="site_1_pv_power", Used=0).Create()
 
         # Create PV system devices if available
         if "pv" in site_data and isinstance(site_data["pv"], list) and len(site_data["pv"]) > 0:
@@ -179,7 +179,7 @@ class DeviceManager:
             if unit not in Devices:
                 Domoticz.Log(f"Creating device '{pv_name} Power'")
                 Domoticz.Device(Unit=unit, Name=f"{pv_name} Power", Type=248, Subtype=1,
-                              Description=f"pv_{pv_id}_power", Used=1).Create()
+                              Description=f"pv_{pv_id}_power", Used=0).Create()
             
             # Add PV energy meter if available
             if "energy" in pv_system:
@@ -189,7 +189,7 @@ class DeviceManager:
                     Domoticz.Log(f"Creating device '{pv_name} Energy'")
                     # For energy meter, use Type=243 (P1 Smart Meter) with Subtype=29 (Electric)
                     Domoticz.Device(Unit=unit, Name=f"{pv_name} Energy", Type=243, Subtype=29,
-                                  Description=f"pv_{pv_id}_energy", Used=1).Create()
+                                  Description=f"pv_{pv_id}_energy", Used=0).Create()
     
     def create_battery_devices(self, site_data, Devices):
         """Create battery Domoticz.Devices"""
@@ -199,7 +199,7 @@ class DeviceManager:
                                  "battery", 1, "power", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="Battery Power", Type=248, Subtype=1,
-                              Description="battery_1_power", Used=1).Create()
+                              Description="battery_1_power", Used=0).Create()
                 
         # Battery SoC - percentage sensor
         if "batterySoc" in site_data:
@@ -207,7 +207,7 @@ class DeviceManager:
                                  "battery", 1, "soc", True, Devices)
             if unit not in Devices:
                 Domoticz.Device(Unit=unit, Name="Battery State of Charge", Type=243, Subtype=6,
-                              Description="battery_1_soc", Used=1).Create()
+                              Description="battery_1_soc", Used=0).Create()
                 
         # Battery mode - selector switch
         if "batteryMode" in site_data:
@@ -219,7 +219,7 @@ class DeviceManager:
                           "LevelOffHidden": "false",
                           "SelectorStyle": "0"}
                 Domoticz.Device(Unit=unit, Name="Battery Mode", Type=244, Subtype=62, 
-                              Switchtype=18, Image=9, Options=Options, Used=1,
+                              Switchtype=18, Image=9, Options=Options, Used=0,
                               Description="battery_1_mode").Create()
     
     def create_battery_devices_from_array(self, site_data, Devices):
@@ -240,7 +240,7 @@ class DeviceManager:
                 if unit not in Devices:
                     Domoticz.Log(f"Creating device '{battery_name} Power'")
                     Domoticz.Device(Unit=unit, Name=f"{battery_name} Power", Type=248, Subtype=1,
-                                  Description=f"battery_{battery_id}_power", Used=1).Create()
+                                  Description=f"battery_{battery_id}_power", Used=0).Create()
                     
             # Battery SoC - percentage sensor
             if "soc" in battery:
@@ -249,7 +249,7 @@ class DeviceManager:
                 if unit not in Devices:
                     Domoticz.Log(f"Creating device '{battery_name} State of Charge'")
                     Domoticz.Device(Unit=unit, Name=f"{battery_name} State of Charge", Type=243, Subtype=6,
-                                  Description=f"battery_{battery_id}_soc", Used=1).Create()
+                                  Description=f"battery_{battery_id}_soc", Used=0).Create()
             
             # Battery mode if available
             if "mode" in battery:
@@ -262,7 +262,7 @@ class DeviceManager:
                              "LevelOffHidden": "false",
                              "SelectorStyle": "0"}
                     Domoticz.Device(Unit=unit, Name=f"{battery_name} Mode", Type=244, Subtype=62, 
-                                  Switchtype=18, Image=9, Options=Options, Used=1,
+                                  Switchtype=18, Image=9, Options=Options, Used=0,
                                   Description=f"battery_{battery_id}_mode").Create()
     
     def create_vehicle_devices(self, vehicle_id, vehicle_data, Devices):
