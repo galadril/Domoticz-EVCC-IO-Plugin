@@ -462,3 +462,57 @@ class EVCCApi:
         except Exception as e:
             Domoticz.Error(f"Error getting vehicle status: {str(e)}")
             return None
+
+    def get_meter_status(self, meter_id):
+        """Get detailed status for a specific meter"""
+        try:
+            cookies = self.get_cookies()
+            response = requests.get(
+                f"{self.base_url}/config/devices/meter/{meter_id}/status",
+                cookies=cookies
+            )
+            
+            if response.status_code != 200:
+                Domoticz.Error(f"Failed to get meter status: {response.status_code}")
+                return None
+
+            data = response.json()
+            if "result" in data:
+                # Extract values from result
+                result = {}
+                for key, item in data["result"].items():
+                    if isinstance(item, dict) and "value" in item:
+                        result[key] = item["value"]
+                return result
+            return None
+                
+        except Exception as e:
+            Domoticz.Error(f"Error getting meter status: {str(e)}")
+            return None
+
+    def get_charger_status(self, charger_id):
+        """Get detailed status for a specific charger"""
+        try:
+            cookies = self.get_cookies()
+            response = requests.get(
+                f"{self.base_url}/config/devices/charger/{charger_id}/status",
+                cookies=cookies
+            )
+            
+            if response.status_code != 200:
+                Domoticz.Error(f"Failed to get charger status: {response.status_code}")
+                return None
+
+            data = response.json()
+            if "result" in data:
+                # Extract values from result
+                result = {}
+                for key, item in data["result"].items():
+                    if isinstance(item, dict) and "value" in item:
+                        result[key] = item["value"]
+                return result
+            return None
+                
+        except Exception as e:
+            Domoticz.Error(f"Error getting charger status: {str(e)}")
+            return None

@@ -372,6 +372,16 @@ class BasePlugin:
                 key: value for key, value in data.items() 
                 if not key.startswith(("loadpoints.", "vehicles."))
             }
+
+            # Get grid meter status if available
+            if "grid" in site_data and isinstance(site_data["grid"], dict) and "id" in site_data["grid"]:
+                meter_id = site_data["grid"]["id"]
+                Domoticz.Debug(f"Getting detailed status for grid meter {meter_id}")
+                meter_status = self.api.get_meter_status(meter_id)
+                if meter_status:
+                    Domoticz.Debug(f"Grid meter status received: {json.dumps(meter_status)}")
+                    # Add meter details to site data
+                    site_data["grid"].update(meter_status)
             
             # Update site devices including PV and battery
             if site_data:
@@ -397,6 +407,15 @@ class BasePlugin:
                 # Update loadpoint with numeric ID
                 loadpoint_id = idx + 1
                 
+                # Get charger status if available
+                if "charger" in loadpoint_data and isinstance(loadpoint_data["charger"], str):
+                    charger_id = loadpoint_data["charger"]
+                    Domoticz.Debug(f"Getting detailed status for charger {charger_id}")
+                    charger_status = self.api.get_charger_status(charger_id)
+                    if charger_status:
+                        Domoticz.Debug(f"Charger status received: {json.dumps(charger_status)}")
+                        loadpoint_data.update(charger_status)
+                
                 # Map WebSocket fields to expected fields if needed
                 if "chargePower" not in loadpoint_data and "chargePower" in site_data:
                     loadpoint_data["chargePower"] = site_data["chargePower"]
@@ -416,18 +435,7 @@ class BasePlugin:
                             # Map charge status to selector switch values
                             if "chargeStatus" in vehicle_status:
                                 status = vehicle_status["chargeStatus"]
-                                if status == "A":  # Connected
-                                    vehicle_status["status"] = "A"
-                                elif status == "B":  # Charging
-                                    vehicle_status["status"] = "B"
-                                elif status == "C":  # Complete
-                                    vehicle_status["status"] = "C"
-                                elif status == "D":  # Error
-                                    vehicle_status["status"] = "D"
-                                elif status == "E":  # Disabled
-                                    vehicle_status["status"] = "E"
-                                elif status == "F":  # Missing
-                                    vehicle_status["status"] = "F"
+                                vehicle_status["status"] = status  # Keep original status code
                             # Merge status with websocket data
                             vehicle_data.update(vehicle_status)
                             Domoticz.Debug(f"Updated vehicle data: {json.dumps(vehicle_data)}")
@@ -438,6 +446,7 @@ class BasePlugin:
 
         except Exception as e:
             Domoticz.Error(f"Error updating devices from WebSocket data: {str(e)}")
+            Domoticz.Error(f"Traceback: {traceback.format_exc()}")
 
     def _update_devices_from_rest_api_data(self, state):
         """Update devices from nested REST API data structure"""

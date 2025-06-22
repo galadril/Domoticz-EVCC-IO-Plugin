@@ -107,7 +107,37 @@ class DeviceManager:
             if unit not in Devices:
                 Domoticz.Device(Name="Grid Power", Unit=unit, Type=248, Subtype=1,
                               Description="site_1_grid_power", Used=0).Create()
+            
+            # Create phase current devices if available in meter status
+            if "grid" in site_data and isinstance(site_data["grid"], dict) and "phaseCurrents" in site_data["grid"]:
+                for phase, current in enumerate(site_data["grid"]["phaseCurrents"], 1):
+                    unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                         "grid", 1, f"current_l{phase}", True, Devices)
+                    if unit not in Devices:
+                        options = {'Custom': '1;A'}
+                        Domoticz.Device(Unit=unit, Name=f"Grid Current L{phase}", 
+                                      Type=243, Subtype=23, Options=options,
+                                      Description=f"grid_1_current_l{phase}", Used=0).Create()
+            
+            # Create phase voltage devices if available in meter status
+            if "grid" in site_data and isinstance(site_data["grid"], dict) and "phaseVoltages" in site_data["grid"]:
+                for phase, voltage in enumerate(site_data["grid"]["phaseVoltages"], 1):
+                    unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                         "grid", 1, f"voltage_l{phase}", True, Devices)
+                    if unit not in Devices:
+                        options = {'Custom': '1;V'}
+                        Domoticz.Device(Unit=unit, Name=f"Grid Voltage L{phase}", 
+                                      Type=243, Subtype=8, Options=options,
+                                      Description=f"grid_1_voltage_l{phase}", Used=0).Create()
         
+        # Grid energy meter if available
+        if "grid" in site_data and isinstance(site_data["grid"], dict) and "energy" in site_data["grid"]:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                 "grid", 1, "energy", True, Devices)
+            if unit not in Devices:
+                Domoticz.Device(Unit=unit, Name="Grid Energy", Type=243, Subtype=29,
+                              Description="grid_1_energy", Used=0).Create()
+                
         # Home power - only instant power
         if "homePower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
@@ -472,11 +502,35 @@ class DeviceManager:
                                   "site", 1, "grid_power", False, Devices)
             if unit is not None:
                 update_device_value(unit, 0, site_data["gridPower"], Devices)
-        elif "grid" in site_data and isinstance(site_data["grid"], dict) and "power" in site_data["grid"]:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "grid_power", False, Devices)
-            if unit is not None:
-                update_device_value(unit, 0, site_data["grid"]["power"], Devices)
+        elif "grid" in site_data and isinstance(site_data["grid"], dict):
+            if "power" in site_data["grid"]:
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                      "site", 1, "grid_power", False, Devices)
+                if unit is not None:
+                    update_device_value(unit, 0, site_data["grid"]["power"], Devices)
+                    
+            # Update phase currents if available
+            if "phaseCurrents" in site_data["grid"]:
+                for phase, current in enumerate(site_data["grid"]["phaseCurrents"], 1):
+                    unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                         "grid", 1, f"current_l{phase}", False, Devices)
+                    if unit is not None:
+                        update_device_value(unit, 0, current, Devices)
+                        
+            # Update phase voltages if available
+            if "phaseVoltages" in site_data["grid"]:
+                for phase, voltage in enumerate(site_data["grid"]["phaseVoltages"], 1):
+                    unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                         "grid", 1, f"voltage_l{phase}", False, Devices)
+                    if unit is not None:
+                        update_device_value(unit, 0, voltage, Devices)
+                        
+            # Update energy if available
+            if "energy" in site_data["grid"]:
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                     "grid", 1, "energy", False, Devices)
+                if unit is not None:
+                    update_device_value(unit, 0, site_data["grid"]["energy"], Devices)
         
         # Home power
         if "homePower" in site_data:
