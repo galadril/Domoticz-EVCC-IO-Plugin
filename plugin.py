@@ -27,6 +27,7 @@ import Domoticz
 import time
 import json
 import os
+import traceback
 from shutil import copy2
 
 # Import our modules
@@ -372,22 +373,40 @@ class BasePlugin:
                 key: value for key, value in data.items() 
                 if not key.startswith(("loadpoints.", "vehicles."))
             }
+            
+            # Create a mapping between WebSocket flat keys and expected nested structure
+            if "gridPower" not in site_data and "grid.power" in data:
+                site_data["gridPower"] = data["grid.power"]
+                
+            if "grid" not in site_data and "grid.power" in data:
+                site_data["grid"] = {"power": data["grid.power"]}
+                if "grid.currents" in data and isinstance(data["grid.currents"], list):
+                    site_data["grid"]["currents"] = data["grid.currents"]
+                if "grid.energy" in data:
+                    site_data["grid"]["energy"] = data["grid.energy"]
 
-            # Get grid meter status if available
-            if "grid" in site_data and isinstance(site_data["grid"], dict) and "id" in site_data["grid"]:
-                meter_id = site_data["grid"]["id"]
-                Domoticz.Debug(f"Getting detailed status for grid meter {meter_id}")
-                meter_status = self.api.get_meter_status(meter_id)
-                if meter_status:
-                    Domoticz.Debug(f"Grid meter status received: {json.dumps(meter_status)}")
-                    # Add meter details to site data
-                    site_data["grid"].update(meter_status)
+            # Map individual battery fields to expected structure
+            if any(key in site_data for key in ["batteryPower", "batterySoc", "batteryMode", "batteryEnergy"]):
+                if "battery" not in site_data:
+                    site_data["battery"] = []
+                    battery_data = {}
+                    if "batteryPower" in site_data: 
+                        battery_data["power"] = site_data["batteryPower"]
+                    if "batterySoc" in site_data:
+                        battery_data["soc"] = site_data["batterySoc"]
+                    if "batteryMode" in site_data:
+                        battery_data["mode"] = site_data["batteryMode"]
+                    if "batteryEnergy" in site_data:
+                        battery_data["energy"] = site_data["batteryEnergy"]
+                    if battery_data:
+                        battery_data["title"] = "Battery"
+                        site_data["battery"].append(battery_data)
             
             # Update site devices including PV and battery
             if site_data:
                 self.device_manager.update_site_devices(site_data, Devices)
 
-            # Parse and update loadpoint data
+            # Parse loadpoint data
             loadpoint_indexes = set()
             for key in data.keys():
                 if key.startswith("loadpoints."):
@@ -422,7 +441,7 @@ class BasePlugin:
                 
                 self.device_manager.update_loadpoint_devices(loadpoint_id, loadpoint_data, Devices)
 
-            # Update vehicle data
+            # Process vehicle data
             if "vehicles" in data and isinstance(data["vehicles"], dict):
                 vehicle_index = 1
                 for vehicle_id_str, vehicle_data in data["vehicles"].items():
@@ -431,7 +450,6 @@ class BasePlugin:
                         Domoticz.Debug(f"Getting detailed status for vehicle {vehicle_id_str}")
                         vehicle_status = self.api.get_vehicle_status(vehicle_id_str)
                         if vehicle_status:
-                            Domoticz.Debug(f"Vehicle status received: {json.dumps(vehicle_status)}")
                             # Map charge status to selector switch values
                             if "chargeStatus" in vehicle_status:
                                 status = vehicle_status["chargeStatus"]
@@ -439,8 +457,6 @@ class BasePlugin:
                             # Merge status with websocket data
                             vehicle_data.update(vehicle_status)
                             Domoticz.Debug(f"Updated vehicle data: {json.dumps(vehicle_data)}")
-                        else:
-                            Domoticz.Debug(f"No status received for vehicle {vehicle_id_str}")
                         self.device_manager.update_vehicle_devices(vehicle_index, vehicle_data, Devices)
                         vehicle_index += 1
 

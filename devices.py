@@ -499,33 +499,26 @@ class DeviceManager:
         # Grid power - handle both formats (direct or nested in grid object)
         if "gridPower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "grid_power", False, Devices)
+                                 "site", 1, "grid_power", False, Devices)
             if unit is not None:
                 update_device_value(unit, 0, site_data["gridPower"], Devices)
         elif "grid" in site_data and isinstance(site_data["grid"], dict):
             if "power" in site_data["grid"]:
                 unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                      "site", 1, "grid_power", False, Devices)
+                                     "site", 1, "grid_power", False, Devices)
                 if unit is not None:
                     update_device_value(unit, 0, site_data["grid"]["power"], Devices)
                     
             # Update phase currents if available
-            if "phaseCurrents" in site_data["grid"]:
-                for phase, current in enumerate(site_data["grid"]["phaseCurrents"], 1):
+            if "currents" in site_data["grid"]:
+                currents = site_data["grid"]["currents"]
+                for phase in range(len(currents)):
                     unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                         "grid", 1, f"current_l{phase}", False, Devices)
+                                         "grid", 1, f"current_l{phase+1}", False, Devices)
                     if unit is not None:
-                        update_device_value(unit, 0, current, Devices)
+                        update_device_value(unit, 0, currents[phase], Devices)
                         
-            # Update phase voltages if available
-            if "phaseVoltages" in site_data["grid"]:
-                for phase, voltage in enumerate(site_data["grid"]["phaseVoltages"], 1):
-                    unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                         "grid", 1, f"voltage_l{phase}", False, Devices)
-                    if unit is not None:
-                        update_device_value(unit, 0, voltage, Devices)
-                        
-            # Update energy if available
+            # Update grid energy
             if "energy" in site_data["grid"]:
                 unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                      "grid", 1, "energy", False, Devices)
@@ -535,14 +528,14 @@ class DeviceManager:
         # Home power
         if "homePower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "home_power", False, Devices)
+                                 "site", 1, "home_power", False, Devices)
             if unit is not None:
                 update_device_value(unit, 0, site_data["homePower"], Devices)
                 
         # PV power
         if "pvPower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                  "site", 1, "pv_power", False, Devices)
+                                 "site", 1, "pv_power", False, Devices)
             if unit is not None:
                 update_device_value(unit, 0, site_data["pvPower"], Devices)
         
@@ -550,11 +543,36 @@ class DeviceManager:
         if "pv" in site_data and isinstance(site_data["pv"], list) and len(site_data["pv"]) > 0:
             self.update_pv_devices(site_data, Devices)
             
-        # Update battery devices if present in either format
-        if any(key in site_data for key in ["batteryPower", "batterySoc", "batteryMode"]):
-            self.update_battery_devices(site_data, Devices)
-        elif "battery" in site_data and isinstance(site_data["battery"], list):
-            self.update_battery_devices_from_array(site_data, Devices)
+        # Try both direct battery fields and battery array format
+        if "batteryPower" in site_data or "batterySoc" in site_data or "battery" in site_data:
+            # Handle flat format
+            if "batteryPower" in site_data:
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                     "battery", 1, "power", False, Devices)
+                if unit is not None:
+                    update_device_value(unit, 0, site_data["batteryPower"], Devices)
+                    
+            if "batterySoc" in site_data:
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                     "battery", 1, "soc", False, Devices)
+                if unit is not None:
+                    update_device_value(unit, 0, site_data["batterySoc"], Devices)
+                    
+            if "batteryMode" in site_data:
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                     "battery", 1, "mode", False, Devices)
+                if unit is not None:
+                    mode = site_data["batteryMode"].lower()
+                    mode_value = 0  # unknown
+                    if mode == "normal": mode_value = 10
+                    elif mode == "hold": mode_value = 20
+                    elif mode == "charge": mode_value = 30
+                    elif mode == "external": mode_value = 40
+                    update_device_value(unit, mode_value, 0, Devices)
+            
+            # Handle array format
+            if "battery" in site_data and isinstance(site_data["battery"], list):
+                self.update_battery_devices_from_array(site_data, Devices)
         
         # Update tariff devices
         if "tariffGrid" in site_data:
@@ -580,35 +598,6 @@ class DeviceManager:
                 value = float(site_data["tariffPriceLoadpoints"]) * 100  # Convert to cents
                 Domoticz.Debug(f"Updating Loadpoints Tariff device (Unit {unit}) to: {value} cents")
                 update_device_value(unit, 0, str(value), Devices)
-
-        # Update grid current devices
-        if "grid" in site_data and isinstance(site_data["grid"], dict) and "currents" in site_data["grid"]:
-            currents = site_data["grid"]["currents"]
-            for phase in range(len(currents)):
-                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                     "grid", 1, f"current_l{phase+1}", False, Devices)
-                if unit is not None:
-                    update_device_value(unit, 0, currents[phase], Devices)
-
-        # Update grid energy device
-        if "grid" in site_data and isinstance(site_data["grid"], dict) and "energy" in site_data["grid"]:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                 "grid", 1, "energy", False, Devices)
-            if unit is not None:
-                update_device_value(unit, 0, site_data["grid"]["energy"], Devices)
-
-        # Update green share devices
-        if "greenShareHome" in site_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                 "site", 1, "green_share_home", False, Devices)
-            if unit is not None:
-                update_device_value(unit, 0, site_data["greenShareHome"] * 100, Devices)
-
-        if "greenShareLoadpoints" in site_data:
-            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
-                                 "site", 1, "green_share_loadpoints", False, Devices)
-            if unit is not None:
-                update_device_value(unit, 0, site_data["greenShareLoadpoints"] * 100, Devices)
     
     def update_pv_devices(self, site_data, Devices):
         """Update PV system devices"""
