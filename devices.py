@@ -104,24 +104,24 @@ class DeviceManager:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "site", 1, "grid_power", True, Devices)
             if unit not in Devices:
-                Domoticz.Device(Name="Grid Power", Unit=unit, TypeName='Usage',
-                              Description="site_1_grid_power").Create()
+                Domoticz.Device(Name="Grid Power", Unit=unit, Type=248, Subtype=1,
+                              Description="site_1_grid_power", Used=1).Create()
         
         # Home power - only instant power
         if "homePower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "site", 1, "home_power", True, Devices)
             if unit not in Devices:
-                Domoticz.Device(Name="Home Power", Unit=unit, TypeName='Usage',
-                              Description="site_1_home_power").Create()
+                Domoticz.Device(Name="Home Power", Unit=unit, Type=248, Subtype=1,
+                              Description="site_1_home_power", Used=1).Create()
                 
         # PV power - only instant power
         if "pvPower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "site", 1, "pv_power", True, Devices)
             if unit not in Devices:
-                Domoticz.Device(Name="PV Power", Unit=unit, TypeName='Usage',
-                              Description="site_1_pv_power").Create()
+                Domoticz.Device(Name="PV Power", Unit=unit, Type=248, Subtype=1,
+                              Description="site_1_pv_power", Used=1).Create()
 
         # Create PV system devices if available
         if "pv" in site_data and isinstance(site_data["pv"], list) and len(site_data["pv"]) > 0:
@@ -179,8 +179,8 @@ class DeviceManager:
                                  "pv", pv_id, "power", True, Devices)
             if unit not in Devices:
                 Domoticz.Log(f"Creating device '{pv_name} Power'")
-                Domoticz.Device(Unit=unit, Name=f"{pv_name} Power", TypeName='Usage',
-                              Description=f"pv_{pv_id}_power").Create()
+                Domoticz.Device(Unit=unit, Name=f"{pv_name} Power", Type=248, Subtype=1,
+                              Description=f"pv_{pv_id}_power", Used=1).Create()
             
             # Add PV energy meter if available
             if "energy" in pv_system:
@@ -188,8 +188,9 @@ class DeviceManager:
                                      "pv", pv_id, "energy", True, Devices)
                 if unit not in Devices:
                     Domoticz.Log(f"Creating device '{pv_name} Energy'")
-                    Domoticz.Device(Unit=unit, Name=f"{pv_name} Energy", TypeName='kWh',
-                                  Description=f"pv_{pv_id}_energy").Create()
+                    # For energy meter, use Type=243 (P1 Smart Meter) with Subtype=29 (Electric)
+                    Domoticz.Device(Unit=unit, Name=f"{pv_name} Energy", Type=243, Subtype=29,
+                                  Description=f"pv_{pv_id}_energy", Used=1).Create()
     
     def create_battery_devices(self, site_data, Devices):
         """Create battery Domoticz.Devices"""
