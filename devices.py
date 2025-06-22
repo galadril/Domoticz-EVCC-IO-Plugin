@@ -127,8 +127,7 @@ class DeviceManager:
         if "pv" in site_data and isinstance(site_data["pv"], list) and len(site_data["pv"]) > 0:
             self.create_pv_devices(site_data, Devices)
             
-        """          
-        # Battery Domoticz.Devices if present
+        # Battery Domoticz.Devices if present in either format
         if any(key in site_data for key in ["batteryPower", "batterySoc", "batteryMode"]):
             self.battery_present = True
             self.create_battery_devices(site_data, Devices)
@@ -136,7 +135,7 @@ class DeviceManager:
         elif "battery" in site_data and isinstance(site_data["battery"], list):
             self.battery_present = True
             self.create_battery_devices_from_array(site_data, Devices)
-        """
+            
         # Create tariff devices with correct type and format
         if "tariffGrid" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
@@ -194,37 +193,34 @@ class DeviceManager:
     
     def create_battery_devices(self, site_data, Devices):
         """Create battery Domoticz.Devices"""
-        # Battery power - only instant power
-        """
+        # Battery power - instant power meter
         if "batteryPower" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "battery", 1, "power", True, Devices)
             if unit not in Devices:
-                Domoticz.Device(Unit=unit, Name="Battery Power", TypeName='Usage',
-                              Description="battery_1_power").Create()
+                Domoticz.Device(Unit=unit, Name="Battery Power", Type=248, Subtype=1,
+                              Description="battery_1_power", Used=1).Create()
                 
-        # Battery SoC
+        # Battery SoC - percentage sensor
         if "batterySoc" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "battery", 1, "soc", True, Devices)
             if unit not in Devices:
-                options = {'Custom': '1;%'}  # Define custom options for percentage sensor
-                Domoticz.Device(Unit=unit, Name="Battery State of Charge", Type=243, Subtype=6, 
-                              Options=options, Used=0, Description="battery_1_soc").Create()
+                Domoticz.Device(Unit=unit, Name="Battery State of Charge", Type=243, Subtype=6,
+                              Description="battery_1_soc", Used=1).Create()
                 
-        # Battery mode
+        # Battery mode - selector switch
         if "batteryMode" in site_data:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                  "battery", 1, "mode", True, Devices)
             if unit not in Devices:
-                Options = {"LevelActions": "|||||",
+                Options = {"LevelActions": "||||",
                           "LevelNames": "Unknown|Normal|Hold|Charge|External",
                           "LevelOffHidden": "false",
                           "SelectorStyle": "0"}
                 Domoticz.Device(Unit=unit, Name="Battery Mode", Type=244, Subtype=62, 
-                              Switchtype=18, Image=9, Options=Options, Used=0, 
+                              Switchtype=18, Image=9, Options=Options, Used=1,
                               Description="battery_1_mode").Create()
-        """
     
     def create_battery_devices_from_array(self, site_data, Devices):
         """Create battery devices from the WebSocket battery array format"""
@@ -233,30 +229,41 @@ class DeviceManager:
         if not battery_array:
             return
         
-        """
         for i, battery in enumerate(battery_array):
             battery_id = i + 1
             battery_name = battery.get("title", f"Battery {battery_id}")
             
-            # Battery power - only instant power
+            # Battery power - instant power meter
             if "power" in battery:
                 unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                     "battery", battery_id, "power", True, Devices)
                 if unit not in Devices:
-                    Domoticz.Log(f"Creating device '{battery_name} Power'.")
-                    Domoticz.Device(Unit=unit, Name=f"{battery_name} Power", TypeName='Usage',
-                                  Description=f"battery_{battery_id}_power").Create()
+                    Domoticz.Log(f"Creating device '{battery_name} Power'")
+                    Domoticz.Device(Unit=unit, Name=f"{battery_name} Power", Type=248, Subtype=1,
+                                  Description=f"battery_{battery_id}_power", Used=1).Create()
                     
-            # Battery SoC
+            # Battery SoC - percentage sensor
             if "soc" in battery:
                 unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                     "battery", battery_id, "soc", True, Devices)
                 if unit not in Devices:
-                    options = {'Custom': '1;%'}  # Define custom options for percentage sensor
-                    Domoticz.Log(f"Creating device '{battery_name} State of Charge'.")
-                    Domoticz.Device(Unit=unit, Name=f"{battery_name} State of Charge", Type=243, Subtype=6, 
-                                  Options=options, Used=0, Description=f"battery_{battery_id}_soc").Create()
-        """
+                    Domoticz.Log(f"Creating device '{battery_name} State of Charge'")
+                    Domoticz.Device(Unit=unit, Name=f"{battery_name} State of Charge", Type=243, Subtype=6,
+                                  Description=f"battery_{battery_id}_soc", Used=1).Create()
+            
+            # Battery mode if available
+            if "mode" in battery:
+                unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
+                                    "battery", battery_id, "mode", True, Devices)
+                if unit not in Devices:
+                    Domoticz.Log(f"Creating device '{battery_name} Mode'")
+                    Options = {"LevelActions": "||||",
+                             "LevelNames": "Unknown|Normal|Hold|Charge|External",
+                             "LevelOffHidden": "false",
+                             "SelectorStyle": "0"}
+                    Domoticz.Device(Unit=unit, Name=f"{battery_name} Mode", Type=244, Subtype=62, 
+                                  Switchtype=18, Image=9, Options=Options, Used=1,
+                                  Description=f"battery_{battery_id}_mode").Create()
     
     def create_vehicle_devices(self, vehicle_id, vehicle_data, Devices):
         """Create Domoticz.Devices for a vehicle"""
@@ -519,7 +526,7 @@ class DeviceManager:
                 Domoticz.Device(Unit=unit, Name=f"{loadpoint_name} Session Solar Percentage", Type=243, Subtype=6,
                               Options=options, Used=0, Description=f"loadpoint_{loadpoint_id}_session_solar_percentage").Create()
         """
-    
+
     def update_site_devices(self, site_data, Devices):
         """Update site Domoticz.Devices"""
         # Grid power - handle both formats (direct or nested in grid object)
@@ -551,6 +558,12 @@ class DeviceManager:
         # Update PV system devices if available
         if "pv" in site_data and isinstance(site_data["pv"], list) and len(site_data["pv"]) > 0:
             self.update_pv_devices(site_data, Devices)
+            
+        # Update battery devices if present in either format
+        if any(key in site_data for key in ["batteryPower", "batterySoc", "batteryMode"]):
+            self.update_battery_devices(site_data, Devices)
+        elif "battery" in site_data and isinstance(site_data["battery"], list):
+            self.update_battery_devices_from_array(site_data, Devices)
         
         # Update tariff devices
         if "tariffGrid" in site_data:
@@ -638,6 +651,7 @@ class DeviceManager:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                   "battery", 1, "power", False, Devices)
             if unit is not None:
+                # Note: power is typically positive when discharging, negative when charging
                 update_device_value(unit, 0, site_data["batteryPower"], Devices)
                 
         # Battery SoC
@@ -652,12 +666,12 @@ class DeviceManager:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                   "battery", 1, "mode", False, Devices)
             if unit is not None:
-                battery_mode = site_data["batteryMode"]
+                mode = site_data["batteryMode"].lower()
                 mode_value = 0  # unknown
-                if battery_mode == "normal": mode_value = 10
-                elif battery_mode == "hold": mode_value = 20
-                elif battery_mode == "charge": mode_value = 30
-                elif battery_mode == "external": mode_value = 40
+                if mode == "normal": mode_value = 10
+                elif mode == "hold": mode_value = 20
+                elif mode == "charge": mode_value = 30
+                elif mode == "external": mode_value = 40
                 update_device_value(unit, mode_value, 0, Devices)
     
     def update_battery_devices_from_array(self, site_data, Devices):
