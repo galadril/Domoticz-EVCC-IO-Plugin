@@ -137,9 +137,6 @@ class EVCCApi:
                     data = json.loads(message)
                     current_time = time.time()
                     
-                    # Log the received data as a single line
-                    Domoticz.Debug(f"WebSocket data: {json.dumps(data)}")
-                    
                     # Determine if this is a complete state update
                     # Complete updates typically include multiple key indicators
                     complete_state_indicators = {"pvPower", "grid", "homePower", "loadpoints.0"}
