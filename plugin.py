@@ -1,5 +1,5 @@
 """
-<plugin key="Domoticz-EVCC-IO-Plugin" name="Domoticz EVCC IO Plugin" author="Mark Heinis" version="0.0.4" wikilink="https://github.com/galadril/Domoticz-EVCC-IO-Plugin/wiki" externallink="https://github.com/galadril/Domoticz-EVCC-IO-Plugin">
+<plugin key="Domoticz-EVCC-IO-Plugin" name="Domoticz EVCC IO Plugin" author="Mark Heinis" version="0.0.5" wikilink="https://github.com/galadril/Domoticz-EVCC-IO-Plugin/wiki" externallink="https://github.com/galadril/Domoticz-EVCC-IO-Plugin">
     <description>
         Plugin for retrieving and updating EV charging data from EVCC.IO API.
     </description>
@@ -7,6 +7,12 @@
         <param field="Address" label="IP Address" width="200px" required="true" default="192.168.1.100"/>
         <param field="Port" label="Port" width="30px" required="true" default="7070"/>
         <param field="Password" label="Password (if auth enabled)" width="200px" required="false" default="" password="true"/>
+        <param field="Mode1" label="Install Custom Page" width="75px">
+            <options>
+                <option label="Yes" value="true" default="true"/>
+                <option label="No" value="false"/>
+            </options>
+        </param>
         <param field="Mode2" label="Update interval (seconds)" width="30px" required="true" default="60"/>
         <param field="Mode6" label="Debug" width="200px">
             <options>
@@ -57,9 +63,15 @@ class BasePlugin:
         self.ws_reconnect_interval = 60  # Force reconnect every 60 seconds
         self.plugin_path = os.path.dirname(os.path.realpath(__file__))
         self.update_in_progress = False  # Flag to prevent multiple concurrent updates
+        self.install_custom_page = True  # Default to installing custom page
         
     def _install_custom_page(self):
         """Install the custom EVCC dashboard page"""
+        # Skip if custom page installation is disabled
+        if not self.install_custom_page:
+            Domoticz.Log("Custom EVCC dashboard installation skipped (disabled in settings)")
+            return
+            
         html_file = os.path.join(self.plugin_path, 'evcc.html')
         target_file = os.path.join('www', 'templates', 'evcc.html')
         
@@ -100,6 +112,10 @@ class BasePlugin:
         if Parameters["Mode2"] != "":
             self.update_interval = int(Parameters["Mode2"])
         
+        # Set custom page installation preference
+        self.install_custom_page = Parameters["Mode1"] == "true"
+        Domoticz.Log(f"Custom page installation is {'enabled' if self.install_custom_page else 'disabled'}")
+        
         # Set Debugging
         Domoticz.Debugging(int(Parameters["Mode6"]))
         
@@ -129,8 +145,9 @@ class BasePlugin:
         # Fetch initial state to create devices
         self._get_initial_state()
         
-        # Install custom page
-        self._install_custom_page()
+        # Install custom page if enabled
+        if self.install_custom_page:
+            self._install_custom_page()
         
         Domoticz.Heartbeat(10)
         
@@ -138,7 +155,8 @@ class BasePlugin:
         Domoticz.Debug("onStop called")
         if self.api:
             self.api.logout()
-        self._remove_custom_page()
+        if self.install_custom_page:
+            self._remove_custom_page()
 
     def _initialize_websocket(self):
         """Initialize WebSocket connection"""
@@ -222,7 +240,7 @@ class BasePlugin:
                     self.update_devices_rest()
         finally:
             self.update_in_progress = False
-    
+
     def update_devices_rest(self):
         """Update devices using REST API"""
         try:
