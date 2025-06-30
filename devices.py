@@ -550,7 +550,12 @@ class DeviceManager:
                 unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                      "battery", 1, "power", False, Devices)
                 if unit is not None:
-                    update_device_value(unit, 0, site_data["batteryPower"], Devices)
+                    # Invert the power value for intuitive display
+                    # Negative values in EVCC (charging) become positive in Domoticz
+                    # Positive values in EVCC (discharging) become negative in Domoticz
+                    battery_power = -1 * site_data["batteryPower"]
+                    Domoticz.Debug(f"Inverting battery power from {site_data['batteryPower']} to {battery_power}")
+                    update_device_value(unit, 0, battery_power, Devices)
                     
             if "batterySoc" in site_data:
                 unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
@@ -631,8 +636,12 @@ class DeviceManager:
             unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                   "battery", 1, "power", False, Devices)
             if unit is not None:
-                # Note: power is typically positive when discharging, negative when charging
-                update_device_value(unit, 0, site_data["batteryPower"], Devices)
+                # Invert the power value for intuitive display
+                # Negative values in EVCC (charging) become positive in Domoticz
+                # Positive values in EVCC (discharging) become negative in Domoticz
+                battery_power = -1 * site_data["batteryPower"]
+                Domoticz.Debug(f"Inverting battery power from {site_data['batteryPower']} to {battery_power}")
+                update_device_value(unit, 0, battery_power, Devices)
                 
         # Battery SoC
         if "batterySoc" in site_data:
@@ -669,7 +678,12 @@ class DeviceManager:
                 unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                       "battery", battery_id, "power", False, Devices)
                 if unit is not None:
-                    update_device_value(unit, 0, battery["power"], Devices)
+                    # Invert the power value for intuitive display
+                    # Negative values in EVCC (charging) become positive in Domoticz
+                    # Positive values in EVCC (discharging) become negative in Domoticz
+                    battery_power = -1 * battery["power"]
+                    Domoticz.Debug(f"Inverting battery {battery_id} power from {battery['power']} to {battery_power}")
+                    update_device_value(unit, 0, battery_power, Devices)
                     
             # Battery SoC
             if "soc" in battery:
