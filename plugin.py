@@ -75,13 +75,13 @@ class BasePlugin:
         html_file = os.path.join(self.plugin_path, 'evcc.html')
         target_file = os.path.join('www', 'templates', 'evcc.html')
         
-        # Update IP address in the HTML file
+        # Update IP address and port in the HTML file
         with open(html_file, 'r') as f:
             content = f.read()
         
-        # Replace the IP address placeholder with the configured address
-        content = content.replace('192.168.1.25', Parameters["Address"])
-        content = content.replace('7070', Parameters["Port"])
+        # Replace the placeholders with the configured address and port
+        content = content.replace('{{EVCC_ADDRESS}}', Parameters["Address"])
+        content = content.replace('{{EVCC_PORT}}', Parameters["Port"])
         
         # Write the updated content to a temporary file
         temp_file = os.path.join(self.plugin_path, 'evcc_temp.html')
