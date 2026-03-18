@@ -188,6 +188,7 @@ sudo service domoticz.sh restart
 | 0.0.3 | Improved vehicle status monitoring |
 | 0.0.4 | Added battery control and bug fixes |
 | 0.0.5 | Custom dashboard integration and stability improvements |
+| 0.0.6 | Fixed battery devices |
 
 ----------
 
