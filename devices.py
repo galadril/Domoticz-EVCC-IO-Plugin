@@ -109,8 +109,8 @@ class DeviceManager:
                               Description="site_1_grid_power", Used=0).Create()
             
             # Create phase current devices if available in meter status
-            if "grid" in site_data and isinstance(site_data["grid"], dict) and "phaseCurrents" in site_data["grid"]:
-                for phase, current in enumerate(site_data["grid"]["phaseCurrents"], 1):
+            if "grid" in site_data and isinstance(site_data["grid"], dict) and "currents" in site_data["grid"]:
+                for phase, current in enumerate(site_data["grid"]["currents"], 1):
                     unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping, 
                                          "grid", 1, f"current_l{phase}", True, Devices)
                     if unit not in Devices:
@@ -158,15 +158,16 @@ class DeviceManager:
         if "pv" in site_data and isinstance(site_data["pv"], list) and len(site_data["pv"]) > 0:
             self.create_pv_devices(site_data, Devices)
             
-        # Battery Domoticz.Devices if present in either format
+        # Battery Domoticz.Devices if present in flat-field format
         if any(key in site_data for key in ["batteryPower", "batterySoc", "batteryMode"]):
             self.battery_present = True
             self.create_battery_devices(site_data, Devices)
-        # Check for battery array in WebSocket format
-        elif "battery" in site_data and isinstance(site_data["battery"], list):
+        # Battery Domoticz.Devices if present as array in WebSocket format.
+        # These two checks are independent of the flat-field check above so that
+        # Power/SoC devices are created even when batteryMode is also a flat key.
+        if "battery" in site_data and isinstance(site_data["battery"], list):
             self.battery_present = True
             self.create_battery_devices_from_array(site_data, Devices)
-        # Check for battery dict in WebSocket format (newer EVCC format)
         elif "battery" in site_data and isinstance(site_data["battery"], dict):
             self.battery_present = True
             self.create_battery_devices_from_dict(site_data, Devices)
