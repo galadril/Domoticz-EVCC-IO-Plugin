@@ -312,6 +312,10 @@ class BasePlugin:
             if not key.startswith(("loadpoints.", "vehicles."))
         }
         
+        # Normalize battery format: if battery is a dict, convert to a list
+        if "battery" in site_data and isinstance(site_data["battery"], dict):
+            site_data["battery"] = [site_data["battery"]]
+
         # Create site devices including PV and battery
         self.device_manager.create_site_devices(site_data, Devices)
         
@@ -431,6 +435,10 @@ class BasePlugin:
                     site_data["grid"]["currents"] = data["grid.currents"]
                 if "grid.energy" in data:
                     site_data["grid"]["energy"] = data["grid.energy"]
+
+            # Normalize battery format: if battery is a dict, convert to a list
+            if "battery" in site_data and isinstance(site_data["battery"], dict):
+                site_data["battery"] = [site_data["battery"]]
 
             # Map individual battery fields to expected structure
             if any(key in site_data for key in ["batteryPower", "batterySoc", "batteryMode", "batteryEnergy"]):
