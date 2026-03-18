@@ -166,6 +166,10 @@ class DeviceManager:
         elif "battery" in site_data and isinstance(site_data["battery"], list):
             self.battery_present = True
             self.create_battery_devices_from_array(site_data, Devices)
+        # Check for battery dict in WebSocket format (newer EVCC format)
+        elif "battery" in site_data and isinstance(site_data["battery"], dict):
+            self.battery_present = True
+            self.create_battery_devices_from_dict(site_data, Devices)
             
         # Create tariff devices with correct type and format
         if "tariffGrid" in site_data:
@@ -296,6 +300,34 @@ class DeviceManager:
                                   Switchtype=18, Image=9, Options=Options, Used=0,
                                   Description=f"battery_{battery_id}_mode").Create()
     
+    def create_battery_devices_from_dict(self, site_data, Devices):
+        """Create battery devices from the WebSocket battery dict format (newer EVCC)"""
+        battery_dict = site_data.get("battery", {})
+
+        if not battery_dict:
+            return
+
+        battery_id = 1
+        battery_name = "Battery"
+
+        # Battery power - instant power meter
+        if "power" in battery_dict:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping,
+                                   "battery", battery_id, "power", True, Devices)
+            if unit not in Devices:
+                Domoticz.Log(f"Creating device '{battery_name} Power'")
+                Domoticz.Device(Unit=unit, Name=f"{battery_name} Power", Type=248, Subtype=1,
+                                Description=f"battery_{battery_id}_power", Used=0).Create()
+
+        # Battery SoC - percentage sensor
+        if "soc" in battery_dict:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping,
+                                   "battery", battery_id, "soc", True, Devices)
+            if unit not in Devices:
+                Domoticz.Log(f"Creating device '{battery_name} State of Charge'")
+                Domoticz.Device(Unit=unit, Name=f"{battery_name} State of Charge", Type=243, Subtype=6,
+                                Description=f"battery_{battery_id}_soc", Used=0).Create()
+
     def create_vehicle_devices(self, vehicle_id, vehicle_data, Devices):
         """Create Domoticz.Devices for a vehicle"""
         vehicle_name = None
@@ -578,6 +610,9 @@ class DeviceManager:
             # Handle array format
             if "battery" in site_data and isinstance(site_data["battery"], list):
                 self.update_battery_devices_from_array(site_data, Devices)
+            # Handle dict format (newer EVCC WebSocket format)
+            elif "battery" in site_data and isinstance(site_data["battery"], dict):
+                self.update_battery_devices_from_dict(site_data, Devices)
         
         # Update tariff devices
         if "tariffGrid" in site_data:
@@ -692,6 +727,34 @@ class DeviceManager:
                 if unit is not None:
                     update_device_value(unit, 0, battery["soc"], Devices)
     
+    def update_battery_devices_from_dict(self, site_data, Devices):
+        """Update battery devices from WebSocket battery dict format (newer EVCC)"""
+        battery_dict = site_data.get("battery", {})
+
+        if not battery_dict:
+            return
+
+        battery_id = 1
+
+        # Battery power
+        if "power" in battery_dict:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping,
+                                   "battery", battery_id, "power", False, Devices)
+            if unit is not None:
+                # Invert the power value for intuitive display
+                # Negative values in EVCC (charging) become positive in Domoticz
+                # Positive values in EVCC (discharging) become negative in Domoticz
+                battery_power = -1 * battery_dict["power"]
+                Domoticz.Debug(f"Inverting battery {battery_id} power from {battery_dict['power']} to {battery_power}")
+                update_device_value(unit, 0, battery_power, Devices)
+
+        # Battery SoC
+        if "soc" in battery_dict:
+            unit = get_device_unit(self.device_unit_mapping, self.unit_device_mapping,
+                                   "battery", battery_id, "soc", False, Devices)
+            if unit is not None:
+                update_device_value(unit, 0, battery_dict["soc"], Devices)
+
     def update_vehicle_devices(self, vehicle_id, vehicle_data, Devices):
         """Update vehicle Domoticz.Devices"""
         Domoticz.Debug(f"Updating vehicle {vehicle_id} with data: {json.dumps(vehicle_data)}")
